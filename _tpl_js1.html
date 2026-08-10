@@ -11,6 +11,13 @@ const ENC = /*__PAYLOAD__*/;
 
 let DB = null;                       // decrypted payload
 let FILT = { date:'all', enum:'all', area:'all', sample:'all' };
+/* Response distributions read as percentages by default — a share of
+   respondents is what the client actually compares across groups. The raw
+   count never disappears: it rides along in the bar label and the tooltip,
+   and the filter bar can switch every chart back to counts at once.
+   Charts carrying a real unit (minutes, hours, rupees, staff output) are
+   not distributions and are deliberately left alone. */
+let SHOWPCT = true;
 
 // ============================================================================
 //  ACCESS GATE  —  password *is* the decryption key, not a check against a string
@@ -394,6 +401,47 @@ function barChart(id, arr, color, horizontal, suffix, msg){
     tblRows(arr));
 }
 
+/**
+ * A response distribution — the default chart for "how did people answer this".
+ * Honours the global %/count switch, and always keeps the raw count in view so
+ * a big percentage off a tiny base can never be mistaken for a big number.
+ */
+function distBar(id, arr, color, horizontal, msg){
+  if (empty(arr)) return noData(id, msg);
+  const n = arr.n || SUM(arr);
+  const pct = SHOWPCT && n;
+  const counts = arr.map(x => x.value);
+  const data = pct ? arr.map(x => ({ label:x.label, value: Math.round(1000 * x.value / n) / 10 }))
+                   : arr.slice();
+  data.n = n;
+  const sfx = pct ? '%' : '';
+  const catWrap = horizontal ? 24 : 11;
+  const catTicks = { font:{family:'Inter',size:11}, color:TXT(), autoSkip:false, maxRotation:0, minRotation:0,
+                     callback:function(v){ return wrapTick(this.getLabelForValue(v), catWrap); } };
+  const valTicks = { font:{family:'Inter',size:11}, color:TXT(), callback: v => v + sfx };
+  if (horizontal) fitHeight(id, data.length, 36, 50);
+  mk(id, { type:'bar',
+    data:{ labels:L(data), datasets:[{ data:V(data), backgroundColor:color, borderRadius:6, maxBarThickness:46 }] },
+    options: baseOpts({ indexAxis: horizontal ? 'y' : 'x',
+      layout:{ padding:{ top: horizontal ? 8 : 22, right: horizontal ? (pct ? 92 : 52) : 8 } },
+      plugins:{ legend:{ display:false },
+        tooltip:{ callbacks:{ label: c => pct
+            ? ' ' + counts[c.dataIndex] + ' of ' + n + ' respondents  (' + c.raw + '%)'
+            : ' ' + c.raw + ' of ' + n + ' respondents  (' + Math.round(1000*c.raw/n)/10 + '%)' } },
+        // Horizontal bars have room for both figures; vertical ones do not.
+        datalabels:{ display:true, anchor:'end', align: horizontal ? 'right' : 'top', clamp:true, clip:false,
+                     color:TXT(), font:{family:'Inter',size:11,weight:'700'},
+                     formatter:(v, c) => !v ? '' : (pct && horizontal ? v + '%  (' + counts[c.dataIndex] + ')'
+                                                                     : v + sfx) } },
+      scales:{
+        x:{ ticks: horizontal ? valTicks : catTicks, grid:{ display:!horizontal, color:GRID() }, border:{display:false},
+            ...(horizontal ? { beginAtZero:true, grace:'16%' } : {}) },
+        y:{ ticks: horizontal ? catTicks : valTicks, grid:{ display:!horizontal, color:GRID() }, border:{display:false},
+            beginAtZero:true, ...(horizontal ? {} : { grace:'18%' }) } } }) },
+    arr.map((x,i) => ({ Answer:x.label, Respondents:counts[i],
+                        'Share %': n ? Math.round(1000*counts[i]/n)/10 : 0 })));
+}
+
 function donutChart(id, arr, colors, msg){
   if (empty(arr)) return noData(id, msg);
   mk(id, { type:'doughnut',
@@ -416,7 +464,9 @@ function donutChart(id, arr, colors, msg){
 function roleBar(id, cmp, opts){
   opts = opts || {};
   if (!cmp.labels.length || (!cmp.nw && !cmp.nh)) return noData(id, opts.msg);
-  const usePct = opts.pct !== false;
+  // `pct:false` pins a chart to counts (hour distributions); everything else
+  // follows the global switch.
+  const usePct = opts.pct === false ? false : SHOWPCT;
   const wd = usePct ? cmp.wifePct : cmp.wife;
   const hd = usePct ? cmp.husbandPct : cmp.husband;
   const sfx = usePct ? '%' : '';

@@ -79,6 +79,11 @@
     <select class="fb-sel" id="f-enum"   onchange="onFilter()"><option value="all">All enumerators</option></select>
     <select class="fb-sel" id="f-area"   onchange="onFilter()"><option value="all">All areas</option></select>
     <select class="fb-sel" id="f-sample" onchange="onFilter()"><option value="all">Main + replacement sample</option></select>
+    <span class="fb-label" style="margin-left:6px">Show</span>
+    <select class="fb-sel" id="f-units" onchange="onFilter()" title="Show response distributions as percentages or as counts">
+      <option value="pct">% of respondents</option>
+      <option value="n">Number of respondents</option>
+    </select>
     <button class="fb-reset" onclick="resetFilters()">Reset</button>
     <span class="fb-count" id="fb-count">—</span>
   </div>

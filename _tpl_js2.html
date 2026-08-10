@@ -26,10 +26,14 @@ function onFilter(){
     area:   document.getElementById('f-area').value,
     sample: document.getElementById('f-sample').value
   };
+  SHOWPCT = document.getElementById('f-units').value === 'pct';
+  const ex = document.getElementById('ex-type');
+  if (ex) ex.value = SHOWPCT ? 'pct' : 'count';
   redrawEverything();
 }
 function resetFilters(){
   ['f-date','f-enum','f-area','f-sample'].forEach(id => document.getElementById(id).value = 'all');
+  document.getElementById('f-units').value = 'pct';
   onFilter();
 }
 function updateFilterCount(){
@@ -167,7 +171,7 @@ function drawOverview(){
   donutChart('chartCoupleState', state, [S(6), S(4), MUTED()]);
 
   progressBars('chartArea', areaProgress(), 'couples');
-  barChart('chartStatus', dist(rows('all'), 'survey_status', 'wife'), S(1), true);
+  distBar('chartStatus', dist(rows('all'), 'survey_status', 'wife'), S(1), true);
 
   const endline = new Map();
   DB.roster.forEach(r => {
@@ -226,20 +230,20 @@ function drawOps(){
     { name:'Husband interviews', color:C_HUSB(), data:eLabels.map(e => rows('Husband').filter(r=>r.enum_name===e).length) }
   ], { horizontal:true, per:40 });
 
-  barChart('chartDuration', band(all, 'duration_min', 5, ' min'), S(4), false);
+  distBar('chartDuration', band(all, 'duration_min', 5, ' min'), S(4), false);
 
   const hourD = [...new Set(nums(all, 'hour'))].sort((a,b) => a-b)
     .map(hh => ({ label:String(hh).padStart(2,'0') + ':00', value: all.filter(r => r.hour === hh).length }));
   hourD.n = all.length;
-  barChart('chartHour', hourD, S(3), false);
+  distBar('chartHour', hourD, S(3), false);
 
-  barChart('chartDow', dist(all, 'enum_day', 'wife'), S(1), false);
+  distBar('chartDow', dist(all, 'enum_day', 'wife'), S(1), false);
 
   const durEnum = eLabels.map(e => ({ label:e, value: Math.round((meanOf(all.filter(r=>r.enum_name===e), 'duration_min') || 0) * 10)/10 }));
   durEnum.n = all.length;
   barChart('chartDurEnum', durEnum, S(5), true, ' min');
 
-  barChart('chartLag', band(all, 'upload_lag_hr', 3, ' hr'), S(3), false);
+  distBar('chartLag', band(all, 'upload_lag_hr', 3, ' hr'), S(3), false);
 }
 
 // ============================================================================
@@ -319,7 +323,7 @@ function drawDQ(){
   roleBar('chartCompreh', byRole('comprehension','wife'));
   roleBar('chartCoop',    byRole('cooperation','wife'));
   donutChart('chartPresent', dist(all,'present_else','wife'), [S(4), MUTED()]);
-  barChart('chartRelation', dist(all,'relationship','wife'), S(5), true, '',
+  distBar('chartRelation', dist(all,'relationship','wife'), S(5), true,
     'Nobody else was present in any interview collected so far, so this follow-up was never asked.');
   donutChart('chartConsent', dist(all,'consent_2','wife'), [S(6), S(2)]);
   donutChart('chartGps', dist(all,'gps_ok'), [S(6), MUTED()]);
@@ -484,19 +488,19 @@ function drawHBW(){
       ${worse || 0}% say it has got worse.`));
 
   donutChart('chartWork1', dist(w,'current_work_status','wife'), [S(6), S(2)]);
-  barChart('chartWorkChange', dist(w,'work_change','wife'), S(4), false);
-  barChart('chartWorkDays', dist(working,'current_work_days'), S(1), false);
-  barChart('chartWorkHrs',  dist(working,'current_work_hrs'),  S(3), false);
-  barChart('chartEarn', band(working, 'current_monthly_earnings', 1000, ''), S(4), false);
+  distBar('chartWorkChange', dist(w,'work_change','wife'), S(4), false);
+  distBar('chartWorkDays', dist(working,'current_work_days'), S(1), false);
+  distBar('chartWorkHrs',  dist(working,'current_work_hrs'),  S(3), false);
+  distBar('chartEarn', band(working, 'current_monthly_earnings', 1000, ''), S(4), false);
 
   const hb = new Map();
   hourly.forEach(x => { const b = Math.floor(x/5)*5; hb.set(b, (hb.get(b)||0)+1); });
   const hbArr = [...hb.entries()].sort((a,b)=>a[0]-b[0]).map(([b,c]) => ({ label:'Rs '+b+'–'+(b+5), value:c }));
   hbArr.n = hourly.length;
-  barChart('chartHourly', hbArr, S(5), false);
+  distBar('chartHourly', hbArr, S(5), false);
 
-  barChart('chartWorkType', dist(w,'work_type','wife'), S(6), true);
-  barChart('chartWorkImp',  dist(w,'work_improvement','wife'), S(5), true);
+  distBar('chartWorkType', dist(w,'work_type','wife'), S(6), true);
+  distBar('chartWorkImp',  dist(w,'work_improvement','wife'), S(5), true);
 
   const pts = working.filter(r => r.work_hours_week && r.current_monthly_earnings)
     .map(r => ({ x:r.work_hours_week, y:r.current_monthly_earnings, name:'Couple ' + r.couple_id }));
@@ -552,10 +556,10 @@ function drawOutside(){
   funnel.n = n;
   barChart('chartFunnel', funnel, S(2), false, '%');
 
-  barChart('chartSource', dist(all,'source_opp','wife'), S(1), true, '',
+  distBar('chartSource', dist(all,'source_opp','wife'), S(1), true,
     'No respondent reached this question — it is only asked of people who contacted an employer.');
   const apps = dist(all,'n_empl_may');
-  barChart('chartApps', apps, S(3), false, '',
+  distBar('chartApps', apps, S(3), false,
     'No respondent reached this question — it is only asked of people who contacted an employer.');
 }
 
@@ -595,9 +599,9 @@ function drawConcerns(){
   roleBar('chartDiscuss',      byRole('discuss_husband','wife'));
   roleBar('chartDiscussTimes', byRole('discuss_husband_times','wife'));
   roleBar('chartDiscussWho',   byRole('discuss_husband_who','wife'));
-  barChart('chartHReact', dist(w,'husband_reaction','wife'), C_HUSB(), false, '',
+  distBar('chartHReact', dist(w,'husband_reaction','wife'), C_HUSB(), false,
     'Only asked where the couple discussed the idea since May.');
-  barChart('chartWReact', dist(h,'wife_reaction','husband'), C_WIFE(), false, '',
+  distBar('chartWReact', dist(h,'wife_reaction','husband'), C_WIFE(), false,
     'Only asked where the couple discussed the idea since May.');
 
   // The same fact — her concern — as she reports it and as he reports it.
@@ -671,14 +675,14 @@ function drawWorkshop(){
          contacted by an employer or NGO after the workshop. Worth watching as the sample grows.`));
 
   roleBar('chartWs1', byRole('w_participate','wife'));
-  barChart('chartWish', dist(w,'wish_attend','wife'), S(4), false, '',
+  distBar('chartWish', dist(w,'wish_attend','wife'), S(4), false,
     'Only asked of wives who did not attend.');
   roleBar('chartNoAttend', byRole('reason_noattend','wife'), { horizontal:true,
     msg:'Every wife interviewed so far attended the workshop, so this question was never reached.' });
-  barChart('chartAccomp', dist(all,'w_accompany','wife'), S(5), false, '',
+  distBar('chartAccomp', dist(all,'w_accompany','wife'), S(5), false,
     'Only asked of respondents who attended the workshop.');
   roleBar('chartContact', byRole('contact_post','wife'), { msg:'Only asked of respondents who attended the workshop.' });
-  barChart('chartIntPost',   dist(all,'int_post','wife'),   S(3), false, '',
+  distBar('chartIntPost',   dist(all,'int_post','wife'),   S(3), false,
     'Only asked of respondents contacted by an employer after the workshop.');
   donutChart('chartOfferPost', dist(all,'offer_post','wife'), [S(6), S(2)],
     'Only asked of respondents contacted by an employer after the workshop.');
@@ -842,8 +846,8 @@ function drawFinance(){
 
   donutChart('chartBank',   dist(w,'bank','wife'), [S(6), S(2)]);
   donutChart('chartMobUse', dist(w,'mobile_use','wife'), [S(6), S(2), MUTED()]);
-  barChart('chartMobOwn',   dist(w,'mobile_owner','wife'), S(5), true);
-  barChart('chartWalletOwn',dist(all,'owns_mobile_wallet','wife'), S(1), true);
+  distBar('chartMobOwn',   dist(w,'mobile_owner','wife'), S(5), true);
+  distBar('chartWalletOwn',dist(all,'owns_mobile_wallet','wife'), S(1), true);
   donutChart('chartWalletType', dist(all,'type_wallet','wife'), PALETTE());
   donutChart('chartNetwork', dist(all,'network','wife'), PALETTE(),
     'Network was only recorded where a usable mobile-wallet number was given.');
@@ -991,7 +995,7 @@ function drawConcord(){
   const cArr = buckets.map(([lo,hi,lab]) => ({ label:lab,
     value: perCouple.filter(c => c.pct >= lo && c.pct <= hi).length })).filter(x => x.value);
   cArr.n = perCouple.length;
-  barChart('chartConcordCouple', cArr, S(6), false);
+  distBar('chartConcordCouple', cArr, S(6), false);
 
   document.querySelectorAll('#cc-table th').forEach(th => {
     th.onclick = () => {
