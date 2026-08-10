@@ -27,16 +27,16 @@
         <img src="https://www.rs.org.pk/wp-content/uploads/2021/05/RS-Logo-White.png" alt="Research Solutions"
              onerror="this.style.display='none'; document.getElementById('logo-fallback').style.display='flex';" />
         <div id="logo-fallback" style="display:none; align-items:center; gap:10px;">
-          <div style="width:40px;height:40px;background:var(--rs-red);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px;">🔍</div>
+          <div style="width:36px;height:36px;background:var(--rs-red);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;">🔍</div>
           <div>
-            <div style="font-size:17px;font-weight:800;color:#fff;letter-spacing:-.3px;">Research Solutions</div>
+            <div style="font-size:16px;font-weight:800;color:#fff;letter-spacing:-.3px;">Research Solutions</div>
             <div style="font-size:9px;color:rgba(255,255,255,.5);letter-spacing:.8px;text-transform:uppercase;">M&amp;A Research Solutions LLC</div>
           </div>
         </div>
       </div>
       <div class="header-study">
         <div class="header-study-title">Post-Workshop Home-Based Worker Survey <span class="live-chip"><i></i>Live</span></div>
-        <div class="header-study-sub">Lahore, Pakistan · Wife &amp; Husband Rounds · Fieldwork Monitoring &amp; Analysis</div>
+        <div class="header-study-sub">Lahore, Pakistan · Wife &amp; Husband Rounds</div>
       </div>
       <div class="header-meta">
         <strong id="meta-title">Lahore District</strong><br>
@@ -48,32 +48,22 @@
     </div>
     <nav class="nav-tabs" id="navTabs">
       <button class="nav-tab active" onclick="showPanel('overview',this)">📊 Overview</button>
-      <button class="nav-tab" onclick="showPanel('ops',this)">🛠️ Field Operations</button>
-      <button class="nav-tab" onclick="showPanel('dq',this)">🔍 Data Quality</button>
+      <button class="nav-tab" onclick="showPanel('field',this)">🛠️ Fieldwork &amp; Quality</button>
       <button class="nav-tab" onclick="showPanel('tracker',this)">👫 Couple Tracker</button>
-      <button class="nav-tab" onclick="showPanel('hbw',this)">🧵 Home-Based Work</button>
-      <button class="nav-tab" onclick="showPanel('outside',this)">🏭 Outside Work</button>
+      <button class="nav-tab" onclick="showPanel('work',this)">🧵 Work, Earnings &amp; Time</button>
+      <button class="nav-tab" onclick="showPanel('jobs',this)">🎓 Workshop &amp; Jobs</button>
       <button class="nav-tab" onclick="showPanel('concerns',this)">💬 Discussion &amp; Concerns</button>
-      <button class="nav-tab" onclick="showPanel('workshop',this)">🎓 Workshop Follow-up</button>
-      <button class="nav-tab" onclick="showPanel('mobility',this)">🚶 Mobility &amp; Agency</button>
-      <button class="nav-tab" onclick="showPanel('timeuse',this)">⏱️ Time Use</button>
-      <button class="nav-tab" onclick="showPanel('finance',this)">💳 Financial Access</button>
+      <button class="nav-tab" onclick="showPanel('mobility',this)">🚶 Mobility &amp; Decisions</button>
       <button class="nav-tab" onclick="showPanel('concord',this)">⚖️ Spousal Agreement</button>
       <button class="nav-tab" onclick="showPanel('explorer',this)">🗂️ Data Explorer</button>
     </nav>
   </div>
-</div>
 
-<div class="live-banner">
-  <span class="live-dot"></span>
-  <span class="live-pill">Live</span>
-  <span>Rebuilt from the latest SurveyCTO export on <strong id="banner-updated" style="color:#fff;">—</strong>. Field activity through <strong id="banner-last" style="color:#fff;">—</strong>.</span>
-  <span class="live-pill" id="banner-pill">—</span>
-</div>
-
-<!-- ===================== GLOBAL FILTERS ===================== -->
-<div class="filterbar">
-  <div class="filterbar-inner">
+  <!-- The filter bar rides inside the sticky header rather than pinning itself
+       at a computed offset: two independently-sticky bars left a gap that page
+       content scrolled through whenever the masthead changed height. -->
+  <div class="filterbar">
+    <div class="filterbar-inner">
     <span class="fb-label">Filter</span>
     <select class="fb-sel" id="f-date"   onchange="onFilter()"><option value="all">All field days</option></select>
     <select class="fb-sel" id="f-enum"   onchange="onFilter()"><option value="all">All enumerators</option></select>
@@ -84,9 +74,17 @@
       <option value="pct">% of respondents</option>
       <option value="n">Number of respondents</option>
     </select>
-    <button class="fb-reset" onclick="resetFilters()">Reset</button>
-    <span class="fb-count" id="fb-count">—</span>
+      <button class="fb-reset" onclick="resetFilters()">Reset</button>
+      <span class="fb-count" id="fb-count">—</span>
+    </div>
   </div>
+</div>
+
+<div class="live-banner">
+  <span class="live-dot"></span>
+  <span class="live-pill">Live</span>
+  <span>Rebuilt <strong id="banner-updated" style="color:#fff;">—</strong> · field activity through <strong id="banner-last" style="color:#fff;">—</strong>.</span>
+  <span class="live-pill" id="banner-pill">—</span>
 </div>
 
 <!-- ===================== MAIN ===================== -->
@@ -99,7 +97,7 @@
       <div>
         <div class="eyebrow">Section 01</div>
         <h2>Survey at a Glance</h2>
-        <p>Where the follow-up round stands today. The study interviews <strong>both spouses of the same couple separately</strong>, so a couple is only finished once the wife <em>and</em> the husband have each completed an interview. Everything below is measured against the <span id="fx-frame1">—</span>-couple tracking frame carried forward from the endline round.</p>
+        <p>The study interviews <strong>both spouses of the same couple separately</strong>, so a couple only counts as finished once the wife <em>and</em> the husband have each completed an interview. Everything below is measured against the <span id="fx-frame1">—</span>-couple tracking frame carried forward from the endline round.</p>
       </div>
     </div>
     <div class="kpi-grid" id="ov-kpis"></div>
@@ -107,123 +105,70 @@
     <div class="chart-grid cols-2">
       <div class="chart-card full">
         <h3>Interviews Completed per Field Day</h3>
-        <div class="chart-desc">Wife and husband interviews by the day the interview was conducted, with the running couple total</div>
+        <div class="chart-desc">Wife and husband interviews by the day of interview, with the running couple total</div>
         <div class="chart-wrap"><canvas id="chartDaily"></canvas></div>
       </div>
     </div>
     <div class="chart-grid cols-3">
       <div class="chart-card">
         <h3>Couples Fully Interviewed</h3>
-        <div class="chart-desc">Couples with both spouses done, against the tracking frame</div>
+        <div class="chart-desc">Both spouses done, against the tracking frame</div>
         <div class="chart-wrap"><canvas id="chartProgress"></canvas></div>
       </div>
       <div class="chart-card">
-        <h3>Interviews by Respondent</h3>
-        <div class="chart-desc">Wife round vs husband round</div>
-        <div class="chart-wrap"><canvas id="chartRole"></canvas></div>
+        <h3>Couple Completion State</h3>
+        <div class="chart-desc">Both spouses · one spouse only · not yet started</div>
+        <div class="chart-wrap"><canvas id="chartCoupleState"></canvas></div>
       </div>
       <div class="chart-card">
-        <h3>Couple Completion State</h3>
-        <div class="chart-desc">Both spouses done · one spouse only · not yet started</div>
-        <div class="chart-wrap"><canvas id="chartCoupleState"></canvas></div>
+        <h3>Tracking Frame: Endline Outcome</h3>
+        <div class="chart-desc">How the original <span id="fx-roster">—</span>-couple roster resolved — this defines who is in scope now</div>
+        <div class="chart-wrap"><canvas id="chartEndline"></canvas></div>
       </div>
     </div>
     <div class="chart-grid">
       <div class="chart-card full">
         <h3>Coverage by Area</h3>
-        <div class="chart-desc">Couples completed (solid) against the remaining area target (shaded). Area names are de-duplicated from the free-text field entries in the tracking sheet.</div>
+        <div class="chart-desc">Couples finished (solid) against the remaining area target (shaded). Area names are de-duplicated from the free-text entries in the tracking sheet.</div>
         <div class="chart-wrap auto"><canvas id="chartArea"></canvas></div>
-      </div>
-    </div>
-    <div class="chart-grid cols-2">
-      <div class="chart-card">
-        <h3>Status of Every Interview Attempt</h3>
-        <div class="chart-q" data-q="wife:survey_status"></div>
-        <div class="chart-wrap auto"><canvas id="chartStatus"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Tracking Frame: Endline Outcome</h3>
-        <div class="chart-desc">How the original roster of <span id="fx-roster">—</span> couples resolved at the endline round — this is what defines the couples in scope now</div>
-        <div class="chart-wrap"><canvas id="chartEndline"></canvas></div>
       </div>
     </div>
     <p class="footnote" id="ov-foot">—</p>
   </div>
 
-  <!-- ---------- 02 · FIELD OPERATIONS ---------- -->
-  <div class="panel" id="panel-ops">
+  <!-- ---------- 02 · FIELDWORK & QUALITY ---------- -->
+  <div class="panel" id="panel-field">
     <div class="section-header">
       <div class="section-header-accent"></div>
       <div>
         <div class="eyebrow">Section 02</div>
-        <h2>Field Operations</h2>
-        <p>How the work is actually being produced: the pace against the frame, the split of output across the field team, and the shape of the working day. Wife interviews are conducted by female enumerators and husband interviews by male enumerators, so the two teams are tracked separately.</p>
+        <h2>Fieldwork &amp; Data Quality</h2>
+        <p>The operational headline — pace against the frame, output across the team, and whether the interviews can be trusted. Every interview re-verifies the respondent against the baseline record on five checks (name, spouse's name, age, years married, children); a mismatch means the team may be sitting with the wrong person, so those five are the first thing to read.</p>
       </div>
     </div>
-    <div class="kpi-grid" id="op-kpis"></div>
-    <div id="op-insights"></div>
-    <div class="chart-grid">
+    <div class="kpi-grid" id="fq-kpis"></div>
+    <div id="fq-insights"></div>
+    <div class="chart-grid cols-2">
       <div class="chart-card full">
         <h3>Cumulative Couples Completed vs Frame</h3>
         <div class="chart-desc">Running total of couples with both interviews done, against the full tracking frame</div>
         <div class="chart-wrap tall"><canvas id="chartCumulative"></canvas></div>
       </div>
-    </div>
-    <div class="chart-grid cols-2">
       <div class="chart-card">
         <h3>Output by Enumerator</h3>
-        <div class="chart-desc">Interviews completed per field staff member, split by the survey round they run</div>
+        <div class="chart-desc">Interviews completed per field staff member, by the round they run</div>
         <div class="chart-wrap auto"><canvas id="chartEnums"></canvas></div>
       </div>
       <div class="chart-card">
         <h3>Interview Length</h3>
-        <div class="chart-desc">Minutes from the start of the form to submission, banded</div>
+        <div class="chart-desc">Minutes from opening the form to submission, banded</div>
         <div class="chart-wrap"><canvas id="chartDuration"></canvas></div>
       </div>
-      <div class="chart-card">
-        <h3>Interview Start Time</h3>
-        <div class="chart-desc">Hour of the day the enumerator opened the form</div>
-        <div class="chart-wrap"><canvas id="chartHour"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Day of the Week</h3>
-        <div class="chart-q" data-q="wife:enum_day"></div>
-        <div class="chart-wrap"><canvas id="chartDow"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Mean Interview Length by Enumerator</h3>
-        <div class="chart-desc">Average minutes per interview — a persistent low outlier is the usual first sign of a rushed form</div>
-        <div class="chart-wrap auto"><canvas id="chartDurEnum"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Upload Lag</h3>
-        <div class="chart-desc">Hours between finishing the interview and the form reaching the server</div>
-        <div class="chart-wrap"><canvas id="chartLag"></canvas></div>
-      </div>
-    </div>
-    <p class="footnote">Interview length is taken from the form's own duration counter where present, and from the start/end timestamps otherwise. Dashboard by Research Solutions (M&amp;A Research Solutions LLC) | www.rs.org.pk</p>
-  </div>
-
-  <!-- ---------- 03 · DATA QUALITY ---------- -->
-  <div class="panel" id="panel-dq">
-    <div class="section-header">
-      <div class="section-header-accent"></div>
-      <div>
-        <div class="eyebrow">Section 03</div>
-        <h2>Data Quality &amp; Respondent Verification</h2>
-        <p>Every interview re-verifies the respondent against what the same household reported at baseline — name, age, spouse's name, years married and number of children. A mismatch means the team may be sitting with the wrong person, so these five checks are the first thing to read. Interview conditions and the enumerator's own assessment follow.</p>
-      </div>
-    </div>
-    <div class="kpi-grid" id="dq-kpis"></div>
-    <div id="dq-insights"></div>
-    <div class="chart-grid">
       <div class="chart-card full">
         <h3>Baseline Verification — All Five Checks</h3>
         <div class="chart-desc">Share of interviews where the respondent's answer matched the baseline record, per check and per round</div>
         <div class="chart-wrap"><canvas id="chartVerify"></canvas></div>
       </div>
-    </div>
-    <div class="chart-grid cols-2">
       <div class="chart-card">
         <h3>Comprehension Level</h3>
         <div class="chart-q" data-q="wife:comprehension"></div>
@@ -234,31 +179,11 @@
         <div class="chart-q" data-q="wife:cooperation"></div>
         <div class="chart-wrap"><canvas id="chartCoop"></canvas></div>
       </div>
-      <div class="chart-card">
-        <h3>Third Party Present During the Interview</h3>
-        <div class="chart-q" data-q="wife:present_else"></div>
-        <div class="chart-wrap"><canvas id="chartPresent"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Who Was Present, and Did They Assist?</h3>
-        <div class="chart-q" data-q="wife:relationship"></div>
-        <div class="chart-wrap"><canvas id="chartRelation"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Consent Recorded</h3>
-        <div class="chart-q" data-q="wife:consent_2"></div>
-        <div class="chart-wrap short"><canvas id="chartConsent"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>GPS Location Captured</h3>
-        <div class="chart-desc">Whether the form recorded a GPS fix at the household</div>
-        <div class="chart-wrap short"><canvas id="chartGps"></canvas></div>
-      </div>
     </div>
     <div class="chart-grid">
       <div class="chart-card full">
         <h3>Interview-Level Quality Flags</h3>
-        <div class="chart-desc">Every interview that tripped at least one check. An empty table is the good outcome.</div>
+        <div class="chart-desc">Every interview that tripped at least one check — baseline mismatch, third-party assistance, a low enumerator rating, a missing GPS fix or a couple ID absent from the roster. An empty table is the good outcome.</div>
         <div class="tbl-wrap"><div class="tbl-scroll"><table class="dtbl" id="dq-table">
           <thead><tr><th>Couple ID</th><th>Round</th><th>Date</th><th>Enumerator</th><th>Flag</th><th>Detail</th></tr></thead>
           <tbody id="dq-body"></tbody></table></div></div>
@@ -266,14 +191,14 @@
     </div>
   </div>
 
-  <!-- ---------- 04 · COUPLE TRACKER ---------- -->
+  <!-- ---------- 03 · COUPLE TRACKER ---------- -->
   <div class="panel" id="panel-tracker">
     <div class="section-header">
       <div class="section-header-accent"></div>
       <div>
-        <div class="eyebrow">Section 04</div>
+        <div class="eyebrow">Section 03</div>
         <h2>Couple Tracker</h2>
-        <p>The full tracking frame, one row per couple, showing whether the wife interview and the husband interview are each done. Search by name, couple ID or area; sort any column; export exactly what you are looking at as a CSV for the field team.</p>
+        <p>The full tracking frame, one row per couple, showing whether the wife interview and the husband interview are each done. Search by name, couple ID or area; sort any column; export exactly what you are looking at for the field team.</p>
       </div>
     </div>
     <div class="kpi-grid" id="tr-kpis"></div>
@@ -312,18 +237,18 @@
     <p class="footnote">Couples marked <em>dropped at endline</em> could not be surveyed in the previous round (refusal, relocation or a household that had to be replaced) and are excluded from the in-scope frame by default.</p>
   </div>
 
-  <!-- ---------- 05 · HOME-BASED WORK ---------- -->
-  <div class="panel" id="panel-hbw">
+  <!-- ---------- 04 · WORK, EARNINGS & TIME ---------- -->
+  <div class="panel" id="panel-work">
     <div class="section-header">
       <div class="section-header-accent"></div>
       <div>
-        <div class="eyebrow">Section 05 · Wife round</div>
-        <h2>Home-Based Work for the Garment Industry</h2>
-        <p>The wife's current home-based work: whether she is still doing it, how much time it takes, what it pays, and what she actually produces. Asked of the wife only.</p>
+        <div class="eyebrow">Section 04</div>
+        <h2>Work, Earnings &amp; the Time Budget</h2>
+        <p>What the wife's home-based garment work actually pays, and what the whole working day costs her once unpaid chores and care are counted. Each spouse also reports the hours they think their <em>spouse</em> spends, which gives two independent estimates of the same quantity.</p>
       </div>
     </div>
-    <div class="kpi-grid" id="hbw-kpis"></div>
-    <div id="hbw-insights"></div>
+    <div class="kpi-grid" id="wk-kpis"></div>
+    <div id="wk-insights"></div>
     <div class="chart-grid cols-2">
       <div class="chart-card">
         <h3>Currently Doing Home-Based Work</h3>
@@ -336,24 +261,9 @@
         <div class="chart-wrap"><canvas id="chartWorkChange"></canvas></div>
       </div>
       <div class="chart-card">
-        <h3>Days Worked in a Regular Week</h3>
-        <div class="chart-q" data-q="wife:current_work_days"></div>
-        <div class="chart-wrap"><canvas id="chartWorkDays"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Hours Worked in a Regular Day</h3>
-        <div class="chart-q" data-q="wife:current_work_hrs"></div>
-        <div class="chart-wrap"><canvas id="chartWorkHrs"></canvas></div>
-      </div>
-      <div class="chart-card">
         <h3>Monthly Earnings from Home-Based Work</h3>
         <div class="chart-q" data-q="wife:current_monthly_earnings"></div>
         <div class="chart-wrap"><canvas id="chartEarn"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Effective Hourly Pay</h3>
-        <div class="chart-desc">Monthly earnings ÷ (days per week × hours per day × 4.33 weeks), in rupees per hour</div>
-        <div class="chart-wrap"><canvas id="chartHourly"></canvas></div>
       </div>
       <div class="chart-card">
         <h3>Type of Work Done</h3>
@@ -361,35 +271,63 @@
         <div class="chart-desc">Multiple answers allowed — bars count respondents, not answers</div>
         <div class="chart-wrap auto"><canvas id="chartWorkType"></canvas></div>
       </div>
-      <div class="chart-card">
-        <h3>What Has Improved Since the Last Visit</h3>
-        <div class="chart-q" data-q="wife:work_improvement"></div>
-        <div class="chart-desc">Multiple answers allowed</div>
-        <div class="chart-wrap auto"><canvas id="chartWorkImp"></canvas></div>
-      </div>
     </div>
     <div class="chart-grid">
       <div class="chart-card full">
         <h3>Earnings against Hours Worked</h3>
-        <div class="chart-desc">Each point is one respondent: weekly hours on the horizontal axis, monthly earnings on the vertical. The dashed line is the sample's average pay rate — points below it are being paid less per hour than the sample average.</div>
+        <div class="chart-desc">Each point is one respondent: weekly hours on the horizontal axis, monthly earnings on the vertical. The dashed line is the sample's average pay rate — points below it are paid less per hour than the sample average.</div>
         <div class="chart-wrap tall"><canvas id="chartEarnScatter"></canvas></div>
+      </div>
+      <div class="chart-card full">
+        <h3>Hours of Unpaid Work per Day — Self-Reported vs Spouse-Reported</h3>
+        <div class="chart-desc">Average hours per day. For each person the first bar is their own account of their time and the second is their spouse's account of that same time. Chores and care are stacked.</div>
+        <div class="chart-wrap tall"><canvas id="chartTimeGap"></canvas></div>
+      </div>
+      <div class="chart-card full">
+        <h3>The Wife's Full Working Day</h3>
+        <div class="chart-desc">Average hours per day: paid home-based work for the garment industry, plus unpaid chores and care</div>
+        <div class="chart-wrap"><canvas id="chartFullDay"></canvas></div>
       </div>
     </div>
   </div>
 
-  <!-- ---------- 06 · OUTSIDE WORK ---------- -->
-  <div class="panel" id="panel-outside">
+  <!-- ---------- 05 · WORKSHOP & JOBS ---------- -->
+  <div class="panel" id="panel-jobs">
     <div class="section-header">
       <div class="section-header-accent"></div>
       <div>
-        <div class="eyebrow">Section 06</div>
-        <h2>Work Outside the Home &amp; Job Search</h2>
-        <p>The central outcome of the study: has anything actually moved since May towards the wife taking paid work outside the home. Both spouses are asked the same job-search questions independently, so the two rounds are shown side by side.</p>
+        <div class="eyebrow">Section 05</div>
+        <h2>The May Workshop &amp; the Route to a Job</h2>
+        <p>Every wife in the frame was invited in May to a workshop on job opportunities for women outside the home. This is the causal chain the study exists to measure: who attended, whether any employer followed up, and how far anyone has actually got towards paid work outside the home. Both spouses are asked the job-search questions independently.</p>
       </div>
     </div>
-    <div class="kpi-grid" id="out-kpis"></div>
-    <div id="out-insights"></div>
+    <div class="kpi-grid" id="jb-kpis"></div>
+    <div id="jb-insights"></div>
+    <div class="chart-grid">
+      <div class="chart-card full">
+        <h3>The Job-Search Funnel</h3>
+        <div class="chart-desc">Each step as a share of all interviews in the current filter. The drop between two bars is where the pipeline is actually breaking.</div>
+        <div class="chart-wrap"><canvas id="chartFunnel"></canvas></div>
+      </div>
+    </div>
     <div class="chart-grid cols-2">
+      <div class="chart-card">
+        <h3>Did She Attend the Workshop?</h3>
+        <div class="chart-q" data-q="wife:w_participate"></div>
+        <div class="chart-desc">Asked of both spouses independently</div>
+        <div class="chart-wrap"><canvas id="chartWs1"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Does She Wish She Had Attended?</h3>
+        <div class="chart-q" data-q="wife:wish_attend"></div>
+        <div class="chart-wrap"><canvas id="chartWish"></canvas></div>
+      </div>
+      <div class="chart-card full">
+        <h3>Why She Did Not Participate</h3>
+        <div class="chart-q" data-q="wife:reason_noattend"></div>
+        <div class="chart-desc">Only asked where the answer to attendance was no — shown by round, since the two spouses can give different reasons</div>
+        <div class="chart-wrap auto"><canvas id="chartNoAttend"></canvas></div>
+      </div>
       <div class="chart-card">
         <h3>Would Consider Outside Work if the Family Allowed</h3>
         <div class="chart-q" data-q="wife:consider_outside"></div>
@@ -397,51 +335,31 @@
         <div class="chart-wrap"><canvas id="chartConsider"></canvas></div>
       </div>
       <div class="chart-card">
-        <h3>Contacted an Employer or Applied Since May</h3>
-        <div class="chart-q" data-q="wife:applied_outside_may"></div>
-        <div class="chart-wrap"><canvas id="chartApplied"></canvas></div>
+        <h3>Contacted by an Employer or NGO Afterwards</h3>
+        <div class="chart-q" data-q="wife:contact_post"></div>
+        <div class="chart-wrap"><canvas id="chartContact"></canvas></div>
       </div>
       <div class="chart-card">
-        <h3>Met an Employer for an Interview</h3>
-        <div class="chart-q" data-q="wife:meet_outside_may"></div>
-        <div class="chart-wrap"><canvas id="chartMeet"></canvas></div>
+        <h3>Contacted an Employer or Applied Since May</h3>
+        <div class="chart-q" data-q="wife:applied_outside_may"></div>
+        <div class="chart-wrap auto"><canvas id="chartApplied"></canvas></div>
       </div>
       <div class="chart-card">
         <h3>Received a Job Offer</h3>
         <div class="chart-q" data-q="wife:offer_outside_may"></div>
-        <div class="chart-wrap"><canvas id="chartOffer"></canvas></div>
-      </div>
-    </div>
-    <div class="chart-grid">
-      <div class="chart-card full">
-        <h3>The Job-Search Funnel</h3>
-        <div class="chart-desc">Each step as a share of all interviews in the current filter — considered, then discussed, then contacted an employer, then interviewed, then offered. The drop between two bars is where the pipeline is actually breaking.</div>
-        <div class="chart-wrap"><canvas id="chartFunnel"></canvas></div>
-      </div>
-    </div>
-    <div class="chart-grid cols-2">
-      <div class="chart-card">
-        <h3>How She Heard About Job Opportunities</h3>
-        <div class="chart-q" data-q="wife:source_opp"></div>
-        <div class="chart-desc">Multiple answers allowed</div>
-        <div class="chart-wrap auto"><canvas id="chartSource"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Employers Contacted &amp; Applications Made</h3>
-        <div class="chart-q" data-q="wife:n_empl_may"></div>
-        <div class="chart-wrap"><canvas id="chartApps"></canvas></div>
+        <div class="chart-wrap auto"><canvas id="chartOffer"></canvas></div>
       </div>
     </div>
   </div>
 
-  <!-- ---------- 07 · DISCUSSION & CONCERNS ---------- -->
+  <!-- ---------- 06 · DISCUSSION & CONCERNS ---------- -->
   <div class="panel" id="panel-concerns">
     <div class="section-header">
       <div class="section-header-accent"></div>
       <div>
-        <div class="eyebrow">Section 07</div>
+        <div class="eyebrow">Section 06</div>
         <h2>Household Discussion &amp; Concerns</h2>
-        <p>Whether the couple has actually talked about the wife working outside the home since May, who raised it, how the other spouse reacted, and what each side says the objections are. Because both spouses answer the same concern questions about themselves <em>and</em> about each other, four separate perspectives can be compared on the same scale.</p>
+        <p>Whether the couple has actually talked about the wife working outside the home since May, who raised it, how the other spouse reacted, and what each side says the objections are. Because both spouses answer the same concern questions about themselves <em>and</em> about each other, four separate perspectives sit on the same scale.</p>
       </div>
     </div>
     <div class="kpi-grid" id="con-kpis"></div>
@@ -489,19 +407,6 @@
         <div class="chart-wrap auto"><canvas id="chartHConcern"></canvas></div>
       </div>
       <div class="chart-card full">
-        <h3>Second Concern Named</h3>
-        <div class="chart-q" data-q="wife:wife_concern_2"></div>
-        <div class="chart-desc">The follow-up concern each respondent gave, pooled across both rounds</div>
-        <div class="chart-wrap auto"><canvas id="chartConcern2"></canvas></div>
-      </div>
-    </div>
-    <div class="chart-grid cols-2">
-      <div class="chart-card">
-        <h3>Discussed with Family Beyond the Spouse</h3>
-        <div class="chart-q" data-q="wife:discuss_family"></div>
-        <div class="chart-wrap"><canvas id="chartDiscussFam"></canvas></div>
-      </div>
-      <div class="chart-card">
         <h3>The Wider Family's Main Concern</h3>
         <div class="chart-q" data-q="wife:family_concern_1"></div>
         <div class="chart-wrap auto"><canvas id="chartFamConcern"></canvas></div>
@@ -509,67 +414,14 @@
     </div>
   </div>
 
-  <!-- ---------- 08 · WORKSHOP ---------- -->
-  <div class="panel" id="panel-workshop">
-    <div class="section-header">
-      <div class="section-header-accent"></div>
-      <div>
-        <div class="eyebrow">Section 08</div>
-        <h2>The May Workshop &amp; What Followed</h2>
-        <p>Every wife in the frame was invited in May to a workshop on job opportunities for women outside the home. This section tracks who actually attended, why the others did not, whether they regret it, and — for the attenders — whether any employer or NGO followed up afterwards.</p>
-      </div>
-    </div>
-    <div class="kpi-grid" id="ws-kpis"></div>
-    <div id="ws-insights"></div>
-    <div class="chart-grid cols-2">
-      <div class="chart-card">
-        <h3>Did She Attend the Workshop?</h3>
-        <div class="chart-q" data-q="wife:w_participate"></div>
-        <div class="chart-desc">Asked of both spouses independently</div>
-        <div class="chart-wrap"><canvas id="chartWs1"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Does She Wish She Had Attended?</h3>
-        <div class="chart-q" data-q="wife:wish_attend"></div>
-        <div class="chart-wrap"><canvas id="chartWish"></canvas></div>
-      </div>
-      <div class="chart-card full">
-        <h3>Why She Did Not Participate</h3>
-        <div class="chart-q" data-q="wife:reason_noattend"></div>
-        <div class="chart-desc">Only asked where the answer to attendance was no — shown separately by round, since the two spouses can give different reasons</div>
-        <div class="chart-wrap auto"><canvas id="chartNoAttend"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Who She Went With</h3>
-        <div class="chart-q" data-q="wife:w_accompany"></div>
-        <div class="chart-wrap"><canvas id="chartAccomp"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Contacted by an Employer or NGO Afterwards</h3>
-        <div class="chart-q" data-q="wife:contact_post"></div>
-        <div class="chart-wrap"><canvas id="chartContact"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Attended a Job Interview Afterwards</h3>
-        <div class="chart-q" data-q="wife:int_post"></div>
-        <div class="chart-wrap"><canvas id="chartIntPost"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Offered a Job Afterwards</h3>
-        <div class="chart-q" data-q="wife:offer_post"></div>
-        <div class="chart-wrap"><canvas id="chartOfferPost"></canvas></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ---------- 09 · MOBILITY & AGENCY ---------- -->
+  <!-- ---------- 07 · MOBILITY & DECISIONS ---------- -->
   <div class="panel" id="panel-mobility">
     <div class="section-header">
       <div class="section-header-accent"></div>
       <div>
-        <div class="eyebrow">Section 09</div>
-        <h2>Mobility &amp; Decision-Making</h2>
-        <p>How freely the wife moves outside the home, who she goes with, how she travels, and who decides. These questions are put to both spouses about the <em>same</em> woman, so each pair of bars is a direct test of whether the household agrees on her freedom of movement.</p>
+        <div class="eyebrow">Section 07</div>
+        <h2>Mobility, Decisions &amp; Independent Access</h2>
+        <p>How freely the wife moves outside the home, who she goes with, who decides, and whether she independently controls a bank account or a phone. These questions are put to both spouses about the <em>same</em> woman, so each pair of bars is a direct test of whether the household agrees.</p>
       </div>
     </div>
     <div class="kpi-grid" id="mob-kpis"></div>
@@ -591,19 +443,9 @@
         <div class="chart-wrap auto"><canvas id="chartTripCo"></canvas></div>
       </div>
       <div class="chart-card">
-        <h3>Company on the Last Social Visit</h3>
-        <div class="chart-q" data-q="wife:trip_f_company"></div>
-        <div class="chart-wrap auto"><canvas id="chartTripFCo"></canvas></div>
-      </div>
-      <div class="chart-card">
         <h3>Usual Transport to the Market</h3>
         <div class="chart-q" data-q="wife:trip_how"></div>
         <div class="chart-wrap"><canvas id="chartTripHow"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Usual Transport for Social Visits</h3>
-        <div class="chart-q" data-q="wife:trip_f_how"></div>
-        <div class="chart-wrap"><canvas id="chartTripFHow"></canvas></div>
       </div>
     </div>
     <div class="chart-grid">
@@ -615,127 +457,31 @@
     </div>
     <div class="chart-grid cols-3">
       <div class="chart-card">
-        <h3>Healthcare for Herself</h3>
-        <div class="chart-q" data-q="wife:decision_making_1"></div>
-        <div class="chart-wrap"><canvas id="chartDec1"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Large Household Purchases</h3>
-        <div class="chart-q" data-q="wife:decision_making_2"></div>
-        <div class="chart-wrap"><canvas id="chartDec2"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Visits to Her Family or Relatives</h3>
-        <div class="chart-q" data-q="wife:decision_making_3"></div>
-        <div class="chart-wrap"><canvas id="chartDec3"></canvas></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ---------- 10 · TIME USE ---------- -->
-  <div class="panel" id="panel-timeuse">
-    <div class="section-header">
-      <div class="section-header-accent"></div>
-      <div>
-        <div class="eyebrow">Section 10</div>
-        <h2>Unpaid Work &amp; the Time Budget</h2>
-        <p>Each spouse reports the hours they personally spend on chores and care, <em>and</em> the hours they think their spouse spends. That gives two independent estimates of the same quantity — what the wife does, and what the husband does. Where the two estimates disagree, someone's contribution is being over- or under-counted at home.</p>
-      </div>
-    </div>
-    <div class="kpi-grid" id="tu-kpis"></div>
-    <div id="tu-insights"></div>
-    <div class="chart-grid">
-      <div class="chart-card full">
-        <h3>Hours of Unpaid Work per Day — Self-Reported vs Spouse-Reported</h3>
-        <div class="chart-desc">Average hours per day. For each person, the left bar is their own account of their time and the right bar is their spouse's account of that same time. Chores and care are stacked.</div>
-        <div class="chart-wrap tall"><canvas id="chartTimeGap"></canvas></div>
-      </div>
-    </div>
-    <div class="chart-grid cols-2">
-      <div class="chart-card">
-        <h3>Household Chores — Hours per Day</h3>
-        <div class="chart-q" data-q="wife:own_chores_hr"></div>
-        <div class="chart-wrap"><canvas id="chartChores"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Care of Children &amp; Elderly — Hours per Day</h3>
-        <div class="chart-q" data-q="wife:own_care_hr"></div>
-        <div class="chart-wrap"><canvas id="chartCare"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Total Unpaid Hours per Day, by Round</h3>
-        <div class="chart-desc">Chores plus care, as each respondent reports for themselves</div>
-        <div class="chart-wrap"><canvas id="chartTotalUnpaid"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>The Wife's Full Working Day</h3>
-        <div class="chart-desc">Average hours per day: paid home-based work for the garment industry, plus unpaid chores and care</div>
-        <div class="chart-wrap"><canvas id="chartFullDay"></canvas></div>
-      </div>
-    </div>
-    <div class="chart-grid">
-      <div class="chart-card full">
-        <h3>Couple-Level Reporting Gap</h3>
-        <div class="chart-desc">One row per couple. Positive means the spouse reports <em>more</em> hours than the person claims for themselves; negative means the spouse under-counts them.</div>
-        <div class="chart-wrap auto"><canvas id="chartGapCouple"></canvas></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ---------- 11 · FINANCIAL ACCESS ---------- -->
-  <div class="panel" id="panel-finance">
-    <div class="section-header">
-      <div class="section-header-accent"></div>
-      <div>
-        <div class="eyebrow">Section 11</div>
-        <h2>Financial &amp; Digital Access</h2>
-        <p>Whether the wife controls a bank account or a phone in her own name, and whose mobile wallet the survey payment had to be routed to. Wallet ownership is a blunt but reliable proxy for who in the household actually holds money.</p>
-      </div>
-    </div>
-    <div class="kpi-grid" id="fin-kpis"></div>
-    <div id="fin-insights"></div>
-    <div class="chart-grid cols-2">
-      <div class="chart-card">
         <h3>Bank Account in Her Own Name</h3>
         <div class="chart-q" data-q="wife:bank"></div>
-        <div class="chart-wrap"><canvas id="chartBank"></canvas></div>
+        <div class="chart-wrap short"><canvas id="chartBank"></canvas></div>
       </div>
       <div class="chart-card">
         <h3>Uses a Mobile Phone</h3>
         <div class="chart-q" data-q="wife:mobile_use"></div>
-        <div class="chart-wrap"><canvas id="chartMobUse"></canvas></div>
+        <div class="chart-wrap short"><canvas id="chartMobUse"></canvas></div>
       </div>
       <div class="chart-card">
         <h3>Who Owns the Phone She Uses</h3>
         <div class="chart-q" data-q="wife:mobile_owner"></div>
         <div class="chart-wrap auto"><canvas id="chartMobOwn"></canvas></div>
       </div>
-      <div class="chart-card">
-        <h3>Whose Mobile Wallet Received the Payment</h3>
-        <div class="chart-q" data-q="wife:owns_mobile_wallet"></div>
-        <div class="chart-wrap auto"><canvas id="chartWalletOwn"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Type of Number Provided</h3>
-        <div class="chart-q" data-q="wife:type_wallet"></div>
-        <div class="chart-wrap"><canvas id="chartWalletType"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Mobile Network</h3>
-        <div class="chart-q" data-q="wife:network"></div>
-        <div class="chart-wrap"><canvas id="chartNetwork"></canvas></div>
-      </div>
     </div>
   </div>
 
-  <!-- ---------- 12 · SPOUSAL AGREEMENT ---------- -->
+  <!-- ---------- 08 · SPOUSAL AGREEMENT ---------- -->
   <div class="panel" id="panel-concord">
     <div class="section-header">
       <div class="section-header-accent"></div>
       <div>
-        <div class="eyebrow">Section 12 · Flagship analysis</div>
+        <div class="eyebrow">Section 08 · Flagship analysis</div>
         <h2>Do the Two Spouses Tell the Same Story?</h2>
-        <p>Twenty-odd questions are put to the wife and to the husband separately, about the same facts — did she attend the workshop, how often does she leave the house, who decides. Interviewing both halves of the couple is what makes this possible, and it is the strongest internal validity check the study has. Every row below is one question, scored across the <span id="fx-nboth">—</span> couples where both interviews are in.</p>
+        <p>Around thirty questions are put to the wife and to the husband separately, about the same facts — did she attend the workshop, how often does she leave the house, who decides. Interviewing both halves of the couple is what makes this possible, and it is the strongest internal validity check the study has. Every row below is one question, scored across the <span id="fx-nboth">—</span> couples where both interviews are in.</p>
       </div>
     </div>
     <div class="kpi-grid" id="cc-kpis"></div>
@@ -751,11 +497,11 @@
       <div class="chart-card">
         <h3>Agreement by Question Domain</h3>
         <div class="chart-desc">Mean agreement rate across the questions in each block</div>
-        <div class="chart-wrap"><canvas id="chartConcordDomain"></canvas></div>
+        <div class="chart-wrap auto"><canvas id="chartConcordDomain"></canvas></div>
       </div>
       <div class="chart-card">
         <h3>How Consistent Is Each Couple?</h3>
-        <div class="chart-desc">Distribution of couples by the share of questions on which the two spouses agree</div>
+        <div class="chart-desc">Couples by the share of questions on which the two spouses agree</div>
         <div class="chart-wrap"><canvas id="chartConcordCouple"></canvas></div>
       </div>
     </div>
@@ -778,14 +524,14 @@
     <p class="footnote">Agreement is exact-match on the labelled answer. Couples where either spouse was not asked the question (because a filter question routed past it) are excluded from that row's denominator, so the couple count varies by question.</p>
   </div>
 
-  <!-- ---------- 13 · DATA EXPLORER ---------- -->
+  <!-- ---------- 09 · DATA EXPLORER ---------- -->
   <div class="panel" id="panel-explorer">
     <div class="section-header">
       <div class="section-header-accent"></div>
       <div>
-        <div class="eyebrow">Section 13</div>
+        <div class="eyebrow">Section 09</div>
         <h2>Data Explorer &amp; Codebook</h2>
-        <p>Every variable in both questionnaires, with the exact question wording, the full answer options, and how the responses collected so far are distributed. Pick any variable to chart it instantly, browse the interview-level records, or export what you see.</p>
+        <p>Every variable in both questionnaires, with the exact question wording, the full answer options, and how the responses collected so far are distributed — including the questions that did not earn a chart of their own. Pick any variable to chart it instantly, browse the interview-level records, or export.</p>
       </div>
     </div>
     <div class="chart-grid">
@@ -799,8 +545,8 @@
           </select>
           <select class="fb-sel" id="ex-var" style="max-width:520px; flex:1;" onchange="renderExplorerChart()"></select>
           <select class="fb-sel" id="ex-type" onchange="renderExplorerChart()">
-            <option value="count">Counts</option>
             <option value="pct">Percentages</option>
+            <option value="count">Counts</option>
           </select>
         </div>
         <div class="chart-q" id="ex-qtext"></div>

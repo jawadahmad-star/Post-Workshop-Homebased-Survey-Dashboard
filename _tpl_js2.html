@@ -46,9 +46,9 @@ function updateFilterCount(){
 }
 
 const PANEL_DRAW = {
-  overview:drawOverview, ops:drawOps, dq:drawDQ, tracker:drawTracker, hbw:drawHBW,
-  outside:drawOutside, concerns:drawConcerns, workshop:drawWorkshop, mobility:drawMobility,
-  timeuse:drawTimeUse, finance:drawFinance, concord:drawConcord, explorer:drawExplorer
+  overview:drawOverview, field:drawField,     tracker:drawTracker, work:drawWork,
+  jobs:drawJobs,         concerns:drawConcerns, mobility:drawMobility,
+  concord:drawConcord,   explorer:drawExplorer
 };
 const drawn = new Set();
 /* Chart.js measures its container at construction, and a panel still set to
@@ -89,6 +89,7 @@ function renderAll(){
   drawPanel('overview');
   animateKpis();
   syncHeaderHeight();
+  initStickyHeader();
 }
 
 // ============================================================================
@@ -120,11 +121,13 @@ const roleColors = () => [C_WIFE(), C_HUSB()];
 // ============================================================================
 //  01 · OVERVIEW
 // ============================================================================
+// ============================================================================
+//  01 · OVERVIEW
+// ============================================================================
 function drawOverview(){
   const m = DB.meta, w = rows('Wife'), h = rows('Husband'), cps = couples();
   const target = m.target_couples;
-  const wIds = new Set(w.map(r => r.couple_id)), hIds = new Set(h.map(r => r.couple_id));
-  const anyIds = new Set([...wIds, ...hIds]);
+  const anyIds = new Set([...w.map(r => r.couple_id), ...h.map(r => r.couple_id)]);
   const partial = anyIds.size - cps.length;
 
   set('ov-kpis',
@@ -133,9 +136,9 @@ function drawOverview(){
     kpi('🎤', (w.length + h.length).toLocaleString(), 'Interviews Completed',
         w.length + ' wife · ' + h.length + ' husband', 'navy', 'navy') +
     kpi('🎯', target.toLocaleString(), 'Couples in the Frame',
-        (target * 2).toLocaleString() + ' interviews to collect in total', 'navy', 'teal') +
+        (target * 2).toLocaleString() + ' interviews in total', 'navy', 'teal') +
     kpi('📍', (FILT.area === 'all' ? m.areas_reached : 1) + ' / ' + areaProgress().length, 'Areas Reached',
-        'Neighbourhoods with at least one couple done', 'navy', 'purple') +
+        'Neighbourhoods with a couple finished', 'navy', 'purple') +
     kpi('📅', m.field_days, 'Field Days So Far',
         (m.first_date || '—') + ' → ' + (m.last_date || '—'), 'navy', 'amber') +
     kpi('⏱️', fmt1(med(nums(rows('all'), 'duration_min'))), 'Median Interview (min)',
@@ -152,15 +155,11 @@ function drawOverview(){
       remaining.toLocaleString() + ' couples untouched. At ' + Math.round(perDay*10)/10 +
       ' couples per field day that is about ' + (perDay ? Math.ceil(remaining/perDay).toLocaleString() : '—') + ' more days.') +
     callout('teal','🤝','Interview pairing',
-      cps.length ? 'Every couple finished so far was interviewed by a female enumerator for the wife and a male enumerator for the husband, usually within minutes of each other.'
+      cps.length ? 'Every finished couple was interviewed by a female enumerator for the wife and a male enumerator for the husband, usually within minutes of each other.'
                  : 'No couple has both interviews yet under the current filter.'));
 
   lineDaily('chartDaily', dailySeries());
   progressDonut('chartProgress', cps.length, target, 'couples');
-
-  const roleDist = [{label:'Wife round', value:w.length}, {label:'Husband round', value:h.length}];
-  roleDist.n = w.length + h.length;
-  donutChart('chartRole', roleDist, roleColors());
 
   const state = [
     { label:'Both spouses interviewed', value:cps.length },
@@ -170,84 +169,31 @@ function drawOverview(){
   state.n = target;
   donutChart('chartCoupleState', state, [S(6), S(4), MUTED()]);
 
-  progressBars('chartArea', areaProgress(), 'couples');
-  distBar('chartStatus', dist(rows('all'), 'survey_status', 'wife'), S(1), true);
-
   const endline = new Map();
   DB.roster.forEach(r => {
     const k = r.eligible ? 'Surveyed at endline — in scope' : (r.endline_status || 'Could not be surveyed');
     endline.set(k, (endline.get(k) || 0) + 1);
   });
   const eArr = [...endline.entries()].map(([label, value]) => ({ label, value })).sort((a,b) => b.value - a.value);
-  const top = eArr.slice(0, 6);
-  const rest = eArr.slice(6).reduce((s,x) => s + x.value, 0);
+  const top = eArr.slice(0, 5);
+  const rest = eArr.slice(5).reduce((s,x) => s + x.value, 0);
   if (rest) top.push({ label:'Other reasons', value:rest });
   top.n = DB.roster.length;
-  donutChart('chartEndline', top, [S(6), S(2), S(4), S(5), S(3), S(7), MUTED()]);
+  donutChart('chartEndline', top, [S(6), S(2), S(4), S(5), S(3), MUTED()]);
+
+  progressBars('chartArea', areaProgress(), 'couples');
 
   set('ov-foot', `Tracking frame: ${DB.roster.length} couples on the original roster, of which
-    <strong>${m.roster_eligible}</strong> were successfully surveyed at endline and form the in-scope frame for this round;
-    ${m.roster_not_surveyed} could not be surveyed (refusal, relocation or replacement) and are excluded.
+    <strong>${m.roster_eligible}</strong> were successfully surveyed at endline and form the in-scope frame for this
+    round; ${m.roster_not_surveyed} could not be surveyed (refusal, relocation or replacement) and are excluded.
     Collected on SurveyCTO with GPS capture at the household. Dashboard by Research Solutions
     (M&amp;A Research Solutions LLC) | www.rs.org.pk`);
 }
 
 // ============================================================================
-//  02 · FIELD OPERATIONS
-// ============================================================================
-function drawOps(){
-  const m = DB.meta, all = rows('all'), cps = couples(), days = dailySeries();
-  const perDay = days.length ? cps.length / days.length : 0;
-  const remaining = Math.max(m.target_couples - cps.length, 0);
-  const enums = [...new Set(all.map(r => r.enum_name).filter(Boolean))];
-
-  set('op-kpis',
-    kpi('📅', days.length, 'Field Days Elapsed', 'Last activity ' + (m.last_date || '—'), 'navy', 'navy') +
-    kpi('⚡', Math.round(perDay * 10)/10, 'Couples per Field Day', 'Both interviews finished', 'up', 'green') +
-    kpi('👥', enums.length, 'Active Enumerators',
-        '~' + (enums.length ? Math.round(all.length / enums.length) : 0) + ' interviews each', 'navy', 'teal') +
-    kpi('⏱️', fmt1(med(nums(all, 'duration_min'))), 'Median Duration (min)',
-        'Mean ' + fmt1(mean(nums(all, 'duration_min'))) + ' min', 'neutral', 'amber') +
-    kpi('📤', fmt1(med(nums(all, 'upload_lag_hr'))), 'Median Upload Lag (hr)',
-        'Interview end → server', 'neutral', 'purple'));
-
-  set('op-insights',
-    box('teal', `<strong>Pace:</strong> the team is finishing <strong>${Math.round(perDay*10)/10}</strong>
-      couples per field day. At that rate the remaining <strong>${remaining.toLocaleString()}</strong> couples
-      need roughly <strong>${perDay ? Math.ceil(remaining/perDay).toLocaleString() : '—'}</strong> further field days.`) +
-    box('navy', `<strong>Interview length:</strong> the median interview runs
-      <strong>${fmt1(med(nums(all,'duration_min')))} minutes</strong>, with the fastest at
-      ${fmt1(Math.min(...nums(all,'duration_min')))} and the slowest at ${fmt1(Math.max(...nums(all,'duration_min')))}.
-      A tight spread like this is what a well-drilled team looks like; watch for any enumerator drifting
-      persistently below the pack in the chart further down.`));
-
-  cumulativeChart('chartCumulative', days, m.target_couples);
-
-  const eLabels = [...new Set(all.map(r => r.enum_name).filter(Boolean))]
-    .sort((a,b) => all.filter(r=>r.enum_name===b).length - all.filter(r=>r.enum_name===a).length);
-  stackedBar('chartEnums', eLabels, [
-    { name:'Wife interviews',    color:C_WIFE(), data:eLabels.map(e => rows('Wife').filter(r=>r.enum_name===e).length) },
-    { name:'Husband interviews', color:C_HUSB(), data:eLabels.map(e => rows('Husband').filter(r=>r.enum_name===e).length) }
-  ], { horizontal:true, per:40 });
-
-  distBar('chartDuration', band(all, 'duration_min', 5, ' min'), S(4), false);
-
-  const hourD = [...new Set(nums(all, 'hour'))].sort((a,b) => a-b)
-    .map(hh => ({ label:String(hh).padStart(2,'0') + ':00', value: all.filter(r => r.hour === hh).length }));
-  hourD.n = all.length;
-  distBar('chartHour', hourD, S(3), false);
-
-  distBar('chartDow', dist(all, 'enum_day', 'wife'), S(1), false);
-
-  const durEnum = eLabels.map(e => ({ label:e, value: Math.round((meanOf(all.filter(r=>r.enum_name===e), 'duration_min') || 0) * 10)/10 }));
-  durEnum.n = all.length;
-  barChart('chartDurEnum', durEnum, S(5), true, ' min');
-
-  distBar('chartLag', band(all, 'upload_lag_hr', 3, ' hr'), S(3), false);
-}
-
-// ============================================================================
-//  03 · DATA QUALITY
+//  02 · FIELDWORK & DATA QUALITY
+//  Operations and quality were two thin tabs; the questions they answer —
+//  "is the work getting done" and "can it be trusted" — are read together.
 // ============================================================================
 const VERIFY = [
   ['match_name',  "Respondent's own name"],
@@ -256,90 +202,110 @@ const VERIFY = [
   ['match_years', 'Years married'],
   ['match_child', 'Number of children']
 ];
-function drawDQ(){
-  const all = rows('all'), w = rows('Wife'), h = rows('Husband');
-  const rate = (rs, v) => shareOf(rs, v, ['Matches baseline']);
-  const overall = VERIFY.map(([v]) => rate(all, v)).filter(x => x != null);
-  const meanVerify = overall.length ? Math.round(mean(overall) * 10)/10 : null;
-  const fails = [];
-  all.forEach(r => {
+
+/** Every interview that tripped a quality check, newest concern first. */
+function qualityFlags(){
+  const out = [];
+  rows('all').forEach(r => {
+    const base = { couple:r.couple_id, role:r._role, date:r.date, enum:r.enum_name };
     VERIFY.forEach(([v, lab]) => {
       if (r[v] === 'Does not match')
-        fails.push({ couple:r.couple_id, role:r._role, date:r.date, enum:r.enum_name,
-                     flag:'Baseline mismatch', detail:lab + ' does not match the baseline record' });
+        out.push(Object.assign({}, base, { flag:'Baseline mismatch',
+          detail:lab + ' does not match the baseline record' }));
     });
     if (r.present_else === 'Yes' && r.assistance && r.assistance !== 'No Assistance')
-      fails.push({ couple:r.couple_id, role:r._role, date:r.date, enum:r.enum_name,
-                   flag:'Third-party assistance', detail:(r.relationship || 'Someone else') + ' — ' + r.assistance });
+      out.push(Object.assign({}, base, { flag:'Third-party assistance',
+        detail:(r.relationship || 'Someone else') + ' — ' + r.assistance }));
     if (r.comprehension === 'Poor' || r.comprehension === 'Fair')
-      fails.push({ couple:r.couple_id, role:r._role, date:r.date, enum:r.enum_name,
-                   flag:'Low comprehension', detail:'Enumerator rated comprehension as ' + r.comprehension });
+      out.push(Object.assign({}, base, { flag:'Low comprehension',
+        detail:'Enumerator rated comprehension as ' + r.comprehension }));
     if (r.cooperation === 'Poor' || r.cooperation === 'Fair')
-      fails.push({ couple:r.couple_id, role:r._role, date:r.date, enum:r.enum_name,
-                   flag:'Low cooperation', detail:'Enumerator rated cooperation as ' + r.cooperation });
+      out.push(Object.assign({}, base, { flag:'Low cooperation',
+        detail:'Enumerator rated cooperation as ' + r.cooperation }));
     if (!r.gps)
-      fails.push({ couple:r.couple_id, role:r._role, date:r.date, enum:r.enum_name,
-                   flag:'No GPS fix', detail:'The form did not record a location for this household' });
+      out.push(Object.assign({}, base, { flag:'No GPS fix',
+        detail:'The form did not record a location for this household' }));
     if (r.in_roster !== 'Matched to roster')
-      fails.push({ couple:r.couple_id, role:r._role, date:r.date, enum:r.enum_name,
-                   flag:'Not on the roster', detail:'Couple ID ' + r.couple_id + ' is not in the tracking sheet' });
+      out.push(Object.assign({}, base, { flag:'Not on the roster',
+        detail:'Couple ID ' + r.couple_id + ' is not in the tracking sheet' }));
   });
-  const top2 = rs => shareOf(rs, 'comprehension', ['Excellent','Very good']);
+  return out;
+}
 
-  set('dq-kpis',
+function drawField(){
+  const m = DB.meta, all = rows('all'), w = rows('Wife'), h = rows('Husband');
+  const cps = couples(), days = dailySeries();
+  const perDay = days.length ? cps.length / days.length : 0;
+  const remaining = Math.max(m.target_couples - cps.length, 0);
+  const enums = [...new Set(all.map(r => r.enum_name).filter(Boolean))];
+  const durs = nums(all, 'duration_min');
+  const rate = (rs, v) => shareOf(rs, v, ['Matches baseline']);
+  const verified = VERIFY.map(([v]) => rate(all, v)).filter(x => x != null);
+  const meanVerify = verified.length ? Math.round(mean(verified) * 10) / 10 : null;
+  const flags = qualityFlags();
+
+  set('fq-kpis',
+    kpi('⚡', Math.round(perDay * 10)/10, 'Couples per Field Day',
+        days.length + ' field day' + (days.length===1?'':'s') + ' so far', 'up', 'green') +
+    kpi('👥', enums.length, 'Active Enumerators',
+        '~' + (enums.length ? Math.round(all.length / enums.length) : 0) + ' interviews each', 'navy', 'teal') +
+    kpi('⏱️', fmt1(med(durs)), 'Median Duration (min)',
+        durs.length ? 'Range ' + fmt1(Math.min(...durs)) + '–' + fmt1(Math.max(...durs)) : '—', 'neutral', 'amber') +
     kpi('🪪', meanVerify == null ? '—' : meanVerify + '%', 'Baseline Checks Passed',
-        'Mean across all five verification checks', meanVerify === 100 ? 'up' : 'neutral',
+        'Mean across all five checks', meanVerify === 100 ? 'up' : 'neutral',
         meanVerify === 100 ? 'green' : 'amber') +
-    kpi('🧠', top2(all) == null ? '—' : top2(all) + '%', 'Comprehension Excellent / Very Good',
-        'Enumerator assessment', 'up', 'teal') +
-    kpi('🤝', shareOf(all,'cooperation',['Excellent','Very good']) == null ? '—' :
-        shareOf(all,'cooperation',['Excellent','Very good']) + '%', 'Cooperation Excellent / Very Good',
-        'Enumerator assessment', 'up', 'green') +
-    kpi('👤', shareOf(all,'present_else',['Yes']) == null ? '—' : shareOf(all,'present_else',['Yes']) + '%',
-        'Interviews with a Third Party', 'Someone else in the room', 'neutral', 'purple') +
     kpi('📍', pctOf(all.filter(r=>r.gps).length, all.length) + '%', 'GPS Fix Captured',
         all.filter(r=>r.gps).length + ' of ' + all.length + ' interviews', 'navy', 'navy') +
-    kpi('🚩', fails.length, 'Open Quality Flags', fails.length ? 'Listed in the table below' : 'Nothing outstanding',
-        fails.length ? 'down' : 'up', fails.length ? '' : 'green'));
+    kpi('🚩', flags.length, 'Open Quality Flags',
+        flags.length ? 'Listed in the table below' : 'Nothing outstanding',
+        flags.length ? 'down' : 'up', flags.length ? '' : 'green'));
 
-  set('dq-insights', meanVerify === 100
-    ? box('green', `<strong>Respondent identity is clean:</strong> all five baseline checks — name, spouse's name,
-        age, years married and number of children — matched for every one of the ${all.length} interviews in view.
-        The team is sitting with the right people.`)
-    : box('amber', `<strong>Verification gaps:</strong> the five baseline checks pass on average
-        <strong>${meanVerify}%</strong> of the time. Each failure is listed in the table below — resolve these
-        before the affected interviews are used in analysis.`));
+  set('fq-insights',
+    box('teal', `<strong>Pace:</strong> the team is finishing <strong>${Math.round(perDay*10)/10}</strong> couples per
+      field day. At that rate the remaining <strong>${remaining.toLocaleString()}</strong> couples need roughly
+      <strong>${perDay ? Math.ceil(remaining/perDay).toLocaleString() : '—'}</strong> further field days.`) +
+    (meanVerify === 100
+      ? box('green', `<strong>Respondent identity is clean:</strong> all five baseline checks — name, spouse's name,
+          age, years married and number of children — matched for every one of the ${all.length} interviews in view,
+          and the median interview runs ${fmt1(med(durs))} minutes with a tight spread. The team is sitting with the
+          right people and not rushing them.`)
+      : box('amber', `<strong>Verification gaps:</strong> the five baseline checks pass on average
+          <strong>${meanVerify}%</strong> of the time. Every failure is listed in the table below — resolve these
+          before the affected interviews are used in analysis.`)));
 
-  const vLabels = VERIFY.map(x => x[1]);
-  stackedBar('chartVerify', vLabels, [
+  cumulativeChart('chartCumulative', days, m.target_couples);
+
+  const eLabels = enums.slice().sort((a,b) =>
+    all.filter(r=>r.enum_name===b).length - all.filter(r=>r.enum_name===a).length);
+  stackedBar('chartEnums', eLabels, [
+    { name:'Wife interviews',    color:C_WIFE(), data:eLabels.map(e => w.filter(r=>r.enum_name===e).length) },
+    { name:'Husband interviews', color:C_HUSB(), data:eLabels.map(e => h.filter(r=>r.enum_name===e).length) }
+  ], { horizontal:true, per:40 });
+
+  distBar('chartDuration', band(all, 'duration_min', 5, ' min'), S(4), false);
+
+  stackedBar('chartVerify', VERIFY.map(x => x[1]), [
     { name:'Wife round — matched',    color:C_WIFE(), data:VERIFY.map(([v]) => rate(w, v) || 0) },
     { name:'Husband round — matched', color:C_HUSB(), data:VERIFY.map(([v]) => rate(h, v) || 0) }
   ], { suffix:'%', minLabel:0 });
-  // Side-by-side reads better than stacked for two independent rates.
+  // Two independent rates read better side by side than stacked.
   const vc = Chart.getChart(document.getElementById('chartVerify'));
   if (vc){ vc.options.scales.x.stacked = false; vc.options.scales.y.stacked = false;
            vc.options.scales.y.max = 100; vc.data.datasets.forEach(d => d.stack = undefined); vc.update(); }
 
   roleBar('chartCompreh', byRole('comprehension','wife'));
   roleBar('chartCoop',    byRole('cooperation','wife'));
-  donutChart('chartPresent', dist(all,'present_else','wife'), [S(4), MUTED()]);
-  distBar('chartRelation', dist(all,'relationship','wife'), S(5), true,
-    'Nobody else was present in any interview collected so far, so this follow-up was never asked.');
-  donutChart('chartConsent', dist(all,'consent_2','wife'), [S(6), S(2)]);
-  donutChart('chartGps', dist(all,'gps_ok'), [S(6), MUTED()]);
 
-  const body = document.getElementById('dq-body');
-  body.innerHTML = fails.length
-    ? fails.map(f => `<tr><td class="cell-strong">${esc(f.couple)}</td>
+  document.getElementById('dq-body').innerHTML = flags.length
+    ? flags.map(f => `<tr><td class="cell-strong">${esc(f.couple)}</td>
         <td><span class="badge ${f.role==='Wife'?'badge-purple':'badge-teal'}">${esc(f.role)}</span></td>
         <td>${esc(f.date||'—')}</td><td>${esc(f.enum||'—')}</td>
         <td><span class="badge badge-amber">${esc(f.flag)}</span></td><td>${esc(f.detail)}</td></tr>`).join('')
-    : `<tr><td colspan="6" class="tbl-empty">✅ No quality flags — every interview in view passed all
-        baseline verification checks, recorded consent and a GPS fix, and was rated at least “Good” by the enumerator.</td></tr>`;
+    : `<tr><td colspan="6" class="tbl-empty">✅ No quality flags — every interview in view passed all five baseline
+        verification checks, recorded consent and a GPS fix, and was rated at least “Good” by the enumerator.</td></tr>`;
 }
-
 // ============================================================================
-//  04 · COUPLE TRACKER
+//  03 · COUPLE TRACKER
 // ============================================================================
 let trSort = { key:'couple_id', dir:1 };
 
@@ -451,148 +417,175 @@ function exportTracker(){
     Status:x.done, 'In scope':x.eligible ? 'Yes' : 'No', 'Endline outcome':x.endline
   })), 'couple_tracker');
 }
-
 // ============================================================================
-//  05 · HOME-BASED WORK  (wife round)
+//  04 · WORK, EARNINGS & TIME
+//  What the paid work pays, and what the whole day costs once unpaid work is
+//  counted — one story, so it lives on one tab.
 // ============================================================================
-function drawHBW(){
-  const w = rows('Wife');
+function drawWork(){
+  const w = rows('Wife'), h = rows('Husband');
   const working = w.filter(r => r.current_work_status === 'Yes');
   const earn = nums(working, 'current_monthly_earnings');
   const hrsWk = nums(working, 'work_hours_week');
   const hourly = working.map(r => (r.work_hours_week && r.current_monthly_earnings)
       ? r.current_monthly_earnings / (r.work_hours_week * 4.33) : null).filter(x => x != null);
 
-  set('hbw-kpis',
+  // Two independent estimates of the same quantity: what she does, what he does.
+  const wSelfCh = meanOf(w,'own_chores'), wSelfCa = meanOf(w,'own_care');
+  const wByHCh  = meanOf(h,'sp_chores'),  wByHCa  = meanOf(h,'sp_care');
+  const hSelfCh = meanOf(h,'own_chores'), hSelfCa = meanOf(h,'own_care');
+  const hByWCh  = meanOf(w,'sp_chores'),  hByWCa  = meanOf(w,'sp_care');
+  const wSelf = (wSelfCh||0)+(wSelfCa||0), wByH = (wByHCh||0)+(wByHCa||0);
+  const hSelf = (hSelfCh||0)+(hSelfCa||0), hByW = (hByWCh||0)+(hByWCa||0);
+  const paid = meanOf(working, 'current_work_hrs') || 0;
+
+  set('wk-kpis',
     kpi('🧵', shareOf(w,'current_work_status',['Yes']) == null ? '—' : shareOf(w,'current_work_status',['Yes']) + '%',
         'Still Doing Home-Based Work', working.length + ' of ' + w.length + ' wives interviewed', 'up', 'green') +
     kpi('💰', fmtRs(med(earn)), 'Median Monthly Earnings',
         earn.length ? 'Range ' + fmtRs(Math.min(...earn)) + '–' + fmtRs(Math.max(...earn)) : '—', 'navy', 'amber', true) +
-    kpi('📆', fmt1(mean(nums(working,'current_work_days'))), 'Days Worked per Week',
-        'Average across working wives', 'navy', 'navy') +
-    kpi('🕐', fmt1(mean(nums(working,'current_work_hrs'))), 'Hours Worked per Day',
-        '≈ ' + fmt1(mean(hrsWk)) + ' hours a week', 'navy', 'teal') +
     kpi('⚖️', hourly.length ? 'Rs ' + fmt1(med(hourly)) : '—', 'Median Pay per Hour',
-        'Earnings ÷ hours actually worked', 'down', 'purple', true) +
-    kpi('📈', shareOf(w,'work_change',['Better']) == null ? '—' : shareOf(w,'work_change',['Better']) + '%',
-        'Say Work Has Improved', 'Compared with the last visit', 'neutral', ''));
+        '≈ ' + fmt1(mean(hrsWk)) + ' hours a week', 'down', 'purple', true) +
+    kpi('👩', fmt1(wSelf) + ' hr', "Wife's Unpaid Work per Day", 'Chores and care, as she reports it', 'neutral', 'teal') +
+    kpi('👨', fmt1(hSelf) + ' hr', "Husband's Unpaid Work per Day", 'As he reports it', 'neutral', 'navy') +
+    kpi('📊', fmt1(wSelf + paid) + ' hr', "Wife's Total Working Day", 'Paid plus unpaid', 'down', ''));
 
-  const worse = shareOf(w,'work_change',['Worse']), same = shareOf(w,'work_change',['Same']);
-  set('hbw-insights',
+  const gapW = wByH - wSelf, gapH = hByW - hSelf;
+  set('wk-insights',
     box('amber', `<strong>The pay problem in one number:</strong> the median wife earns
-      <strong>${fmtRs(med(earn))} a month</strong> for about <strong>${fmt1(mean(hrsWk))} hours of work a week</strong> —
-      roughly <strong>Rs ${fmt1(med(hourly))} an hour</strong>. That is the economic backdrop against which the
-      question of taking work outside the home is being asked.`) +
-    box('navy', `<strong>Direction of travel:</strong> ${same == null ? '—' : same + '%'} say their work is
-      unchanged since the last visit, ${shareOf(w,'work_change',['Better']) || 0}% say it has improved and
-      ${worse || 0}% say it has got worse.`));
+      <strong>${fmtRs(med(earn))} a month</strong> for about <strong>${fmt1(mean(hrsWk))} hours of work a week</strong>
+      — roughly <strong>Rs ${fmt1(med(hourly))} an hour</strong> — and carries a further
+      <strong>${fmt1(wSelf)} hours a day</strong> of unpaid chores and care on top. That is the economic backdrop
+      against which the question of taking work outside the home is being asked.`) +
+    box(Math.abs(gapW) > 1 || Math.abs(gapH) > 1 ? 'amber' : 'green',
+      `<strong>Cross-reporting:</strong> husbands estimate their wife's unpaid work at
+       <strong>${fmt1(wByH)} hours</strong> against the <strong>${fmt1(wSelf)} hours</strong> she claims herself
+       (${gapW >= 0 ? '+' : ''}${fmt1(gapW)}), while wives estimate their husband's at
+       <strong>${fmt1(hByW)} hours</strong> against the <strong>${fmt1(hSelf)} hours</strong> he claims
+       (${gapH >= 0 ? '+' : ''}${fmt1(gapH)}). ${Math.abs(gapW) > 1 || Math.abs(gapH) > 1
+        ? 'Gaps this size mean at least one side of the household is systematically mis-counting who does the work.'
+        : 'The two accounts line up closely, which is a good sign for the reliability of the time-use module.'}`));
 
   donutChart('chartWork1', dist(w,'current_work_status','wife'), [S(6), S(2)]);
   distBar('chartWorkChange', dist(w,'work_change','wife'), S(4), false);
-  distBar('chartWorkDays', dist(working,'current_work_days'), S(1), false);
-  distBar('chartWorkHrs',  dist(working,'current_work_hrs'),  S(3), false);
   distBar('chartEarn', band(working, 'current_monthly_earnings', 1000, ''), S(4), false);
-
-  const hb = new Map();
-  hourly.forEach(x => { const b = Math.floor(x/5)*5; hb.set(b, (hb.get(b)||0)+1); });
-  const hbArr = [...hb.entries()].sort((a,b)=>a[0]-b[0]).map(([b,c]) => ({ label:'Rs '+b+'–'+(b+5), value:c }));
-  hbArr.n = hourly.length;
-  distBar('chartHourly', hbArr, S(5), false);
-
   distBar('chartWorkType', dist(w,'work_type','wife'), S(6), true);
-  distBar('chartWorkImp',  dist(w,'work_improvement','wife'), S(5), true);
 
   const pts = working.filter(r => r.work_hours_week && r.current_monthly_earnings)
     .map(r => ({ x:r.work_hours_week, y:r.current_monthly_earnings, name:'Couple ' + r.couple_id }));
-  const slope = pts.length ? mean(pts.map(p => p.y / p.x)) : 0;
-  scatterChart('chartEarnScatter', pts, 'Hours worked per week', 'Monthly earnings', slope);
+  scatterChart('chartEarnScatter', pts, 'Hours worked per week', 'Monthly earnings',
+               pts.length ? mean(pts.map(p => p.y / p.x)) : 0);
+
+  stackedBar('chartTimeGap',
+    ["Wife's time — her account", "Wife's time — his account",
+     "Husband's time — his account", "Husband's time — her account"],
+    [ { name:'Household chores', color:S(1),
+        data:[wSelfCh||0, wByHCh||0, hSelfCh||0, hByWCh||0].map(x=>Math.round(x*100)/100) },
+      { name:'Care of children & elderly', color:S(4),
+        data:[wSelfCa||0, wByHCa||0, hSelfCa||0, hByWCa||0].map(x=>Math.round(x*100)/100) } ],
+    { horizontal:true, per:56, suffix:' hr', minLabel:0.2 });
+
+  const fd = [{ label:'Paid home-based work', value:Math.round(paid*100)/100 },
+              { label:'Household chores', value:Math.round((wSelfCh||0)*100)/100 },
+              { label:'Care of children & elderly', value:Math.round((wSelfCa||0)*100)/100 }];
+  fd.n = w.length;
+  barChart('chartFullDay', fd, S(5), false, ' hr');
 }
 
 // ============================================================================
-//  06 · OUTSIDE WORK
+//  05 · WORKSHOP & JOBS
+//  The workshop and the job search are one causal chain, read top to bottom.
 // ============================================================================
-function drawOutside(){
+function drawJobs(){
   const w = rows('Wife'), h = rows('Husband'), all = rows('all');
-  const yesApplied = shareOf(all,'applied_outside_may',
-      ['Yes, talked with one or more employers but did not apply','Yes talked with one or more employers and applied']);
+  const att = shareOf(w,'w_participate',['Yes']);
   const consider = shareOf(w,'consider_outside',['Yes']);
+  const contacted = all.filter(r => r.contact_post === 'Yes').length;
+  const yesApplied = shareOf(all,'applied_outside_may',
+      ['Yes, talked with one or more employers but did not apply',
+       'Yes talked with one or more employers and applied']);
   const offered = all.filter(r => r.offer_outside_may && r.offer_outside_may.indexOf('Yes') === 0).length;
+  const nonAtt = dist(w,'reason_noattend','wife');
 
-  set('out-kpis',
+  set('jb-kpis',
+    kpi('🎓', (att||0) + '%', 'Attended the Workshop', 'As the wife reports it', 'neutral', 'purple') +
+    kpi('😔', shareOf(w,'wish_attend',['Yes']) == null ? '—' : shareOf(w,'wish_attend',['Yes']) + '%',
+        'Wish They Had Attended', 'Among wives who did not go', 'neutral', 'amber') +
     kpi('🤔', consider == null ? '—' : consider + '%', 'Would Consider Outside Work',
-        'If the family allowed it — wife round', consider >= 50 ? 'up' : 'neutral', 'purple') +
-    kpi('💬', shareOf(all,'discuss_husband',['Yes']) + '%', 'Discussed It With Their Spouse',
-        'Since May, either round', 'neutral', 'teal') +
-    kpi('📮', (yesApplied || 0) + '%', 'Contacted an Employer',
-        'Or formally applied since May', (yesApplied || 0) > 0 ? 'up' : 'down', '') +
-    kpi('🤝', shareOf(all,'meet_outside_may',['Yes, one','Yes, more than one (specify how many in the box)']) + '%',
-        'Met an Employer in Person', 'Job interview outside the home', 'down', 'navy') +
-    kpi('📄', offered, 'Job Offers Reported',
-        'Across ' + all.length + ' interviews', offered ? 'up' : 'down', offered ? 'green' : 'amber'));
+        'If the family allowed it', consider >= 50 ? 'up' : 'neutral', 'teal') +
+    kpi('📞', contacted, 'Contacted by an Employer or NGO', 'Following the workshop',
+        contacted ? 'up' : 'down', contacted ? 'green' : '') +
+    kpi('📮', (yesApplied || 0) + '%', 'Contacted an Employer', 'Or formally applied since May',
+        (yesApplied || 0) > 0 ? 'up' : 'down', 'navy') +
+    kpi('📄', offered, 'Job Offers Reported', 'Across ' + all.length + ' interviews',
+        offered ? 'up' : 'down', offered ? 'green' : ''));
 
-  set('out-insights',
+  set('jb-insights',
     box('primary', `<strong>The pipeline has not moved yet:</strong> ${consider == null ? '—' : consider + '%'} of
       wives say they would consider paid work outside the home if the family allowed it, but only
-      <strong>${yesApplied || 0}%</strong> have contacted an employer since May and effectively none have reached
-      an interview. Willingness is not the binding constraint — the step from willingness to a first employer
-      contact is where the whole funnel stalls.`) +
-    box('navy', `<strong>Both spouses were asked separately</strong> about contacts, interviews and offers.
-      Where their answers differ, the couple-level detail is in the Spousal Agreement section.`));
-
-  donutChart('chartConsider', dist(w,'consider_outside','wife'), [S(6), S(2)]);
-  roleBar('chartApplied', byRole('applied_outside_may','wife'), { horizontal:true });
-  roleBar('chartMeet',    byRole('meet_outside_may','wife'),    { horizontal:true });
-  roleBar('chartOffer',   byRole('offer_outside_may','wife'),   { horizontal:true });
+      <strong>${yesApplied || 0}%</strong> have contacted an employer since May and effectively none have reached an
+      interview. Willingness is not the binding constraint — the step from willingness to a first employer contact is
+      where the whole funnel stalls.`) +
+    box(contacted ? 'green' : 'amber', contacted
+      ? `<strong>Follow-up is happening:</strong> ${contacted} respondent${contacted===1?'':'s'} report being contacted
+         by an employer or NGO after the workshop — the first sign that the workshop channel converts.`
+      : `<strong>No employer follow-up yet:</strong> nobody in the interviews collected so far reports being contacted
+         by an employer or NGO after the workshop.${nonAtt.length ? ` Among wives who did not attend, the most common
+         reason given is <strong>“${nonAtt[0].label}”</strong>.` : ''} Worth watching as the sample grows.`));
 
   const n = all.length || 1;
   const funnel = [
-    { label:'Would consider outside work', value: w.filter(r=>r.consider_outside==='Yes').length, denom:w.length },
-    { label:'Discussed it with their spouse', value: all.filter(r=>r.discuss_husband==='Yes').length, denom:n },
-    { label:'Discussed it with wider family', value: all.filter(r=>r.discuss_family==='Yes').length, denom:n },
-    { label:'Contacted an employer or applied', value: all.filter(r=>r.applied_outside_may && r.applied_outside_may.indexOf('Yes')===0).length, denom:n },
-    { label:'Met an employer for an interview', value: all.filter(r=>r.meet_outside_may && r.meet_outside_may.indexOf('Yes')===0).length, denom:n },
-    { label:'Received a job offer', value: all.filter(r=>r.offer_outside_may && r.offer_outside_may.indexOf('Yes')===0).length, denom:n }
-  ].map(x => ({ label:x.label, value: x.denom ? Math.round(1000*x.value/x.denom)/10 : 0, raw:x.value, denom:x.denom }));
+    { label:'Would consider outside work',      v:w.filter(r=>r.consider_outside==='Yes').length, d:w.length },
+    { label:'Discussed it with their spouse',   v:all.filter(r=>r.discuss_husband==='Yes').length, d:n },
+    { label:'Discussed it with wider family',   v:all.filter(r=>r.discuss_family==='Yes').length, d:n },
+    { label:'Contacted an employer or applied', v:all.filter(r=>r.applied_outside_may && r.applied_outside_may.indexOf('Yes')===0).length, d:n },
+    { label:'Met an employer for an interview', v:all.filter(r=>r.meet_outside_may && r.meet_outside_may.indexOf('Yes')===0).length, d:n },
+    { label:'Received a job offer',             v:all.filter(r=>r.offer_outside_may && r.offer_outside_may.indexOf('Yes')===0).length, d:n }
+  ].map(x => ({ label:x.label, value: x.d ? Math.round(1000*x.v/x.d)/10 : 0 }));
   funnel.n = n;
   barChart('chartFunnel', funnel, S(2), false, '%');
 
-  distBar('chartSource', dist(all,'source_opp','wife'), S(1), true,
-    'No respondent reached this question — it is only asked of people who contacted an employer.');
-  const apps = dist(all,'n_empl_may');
-  distBar('chartApps', apps, S(3), false,
-    'No respondent reached this question — it is only asked of people who contacted an employer.');
+  roleBar('chartWs1', byRole('w_participate','wife'));
+  distBar('chartWish', dist(w,'wish_attend','wife'), S(4), false,
+    'Only asked of wives who did not attend the workshop.');
+  roleBar('chartNoAttend', byRole('reason_noattend','wife'), { horizontal:true,
+    msg:'Every wife interviewed so far attended the workshop, so this question was never reached.' });
+  donutChart('chartConsider', dist(w,'consider_outside','wife'), [S(6), S(2)]);
+  roleBar('chartContact', byRole('contact_post','wife'),
+          { msg:'Only asked of respondents who attended the workshop.' });
+  roleBar('chartApplied', byRole('applied_outside_may','wife'), { horizontal:true });
+  roleBar('chartOffer',   byRole('offer_outside_may','wife'),   { horizontal:true });
 }
 
 // ============================================================================
-//  07 · DISCUSSION & CONCERNS
+//  06 · DISCUSSION & CONCERNS
 // ============================================================================
 function drawConcerns(){
   const w = rows('Wife'), h = rows('Husband'), all = rows('all');
   const disc = shareOf(all,'discuss_husband',['Yes']);
   const wSay = shareOf(w,'discuss_husband',['Yes']), hSay = shareOf(h,'discuss_husband',['Yes']);
-  const topConcern = arr => { const d = dist(arr.rs, arr.v, 'wife'); return d.length ? d[0] : null; };
-  const wc = topConcern({ rs:w, v:'wife_concern_1' });
-  const hc = topConcern({ rs:h, v:'husband_concern_1' });
+  const wc = dist(w,'wife_concern_1','wife')[0];
+  const hc = dist(h,'husband_concern_1','husband')[0];
 
   set('con-kpis',
     kpi('💬', (disc||0) + '%', 'Discussed Since May', 'Pooled across both rounds', 'neutral', 'teal') +
     kpi('👩', (wSay||0) + '%', 'Wife Says They Discussed It', 'Wife round only', 'navy', 'purple') +
     kpi('👨', (hSay||0) + '%', 'Husband Says They Discussed It', 'Husband round only', 'navy', 'navy') +
+    kpi('👪', shareOf(all,'discuss_family',['Yes']) + '%', 'Discussed With Wider Family',
+        'Beyond the spouse', 'neutral', 'amber') +
     kpi('🏠', wc ? Math.round(100*wc.value/(w.length||1)) + '%' : '—', "Wife's Top Concern",
-        wc ? wc.label : '—', 'neutral', 'amber') +
-    kpi('👨‍👩‍👧', hc ? Math.round(100*hc.value/(h.length||1)) + '%' : '—', "Husband's Top Concern",
-        hc ? hc.label : '—', 'neutral', ''));
+        wc ? wc.label : '—', 'neutral', '', true));
 
   set('con-insights',
     box('purple', `<strong>What actually worries people:</strong> the two concerns named far more than any other are
       <strong>household chores not getting done</strong> and <strong>childcare responsibilities</strong> — practical,
-      logistical objections rather than objections of principle. Concerns about community judgement, safety
-      and religious or cultural expectations are named far less often.`) +
+      logistical objections rather than objections of principle. Concerns about community judgement, safety and
+      religious or cultural expectations are named far less often.`) +
     (Math.abs((wSay||0) - (hSay||0)) > 5
       ? box('amber', `<strong>The two rounds disagree about whether a conversation even happened:</strong>
           ${wSay}% of wives say the subject came up since May against ${hSay}% of husbands — a
-          ${Math.abs(Math.round((wSay||0)-(hSay||0)))}-point gap. Which spouse remembers the conversation is itself
-          a finding; the couple-level breakdown is in the Spousal Agreement section.`)
+          ${Math.abs(Math.round((wSay||0)-(hSay||0)))}-point gap. Which spouse remembers the conversation is itself a
+          finding; the couple-level breakdown is in the Spousal Agreement section.`)
       : box('navy', `<strong>Both rounds broadly agree</strong> on whether the conversation took place
           (${wSay}% of wives against ${hSay}% of husbands).`)));
 
@@ -604,18 +597,12 @@ function drawConcerns(){
   distBar('chartWReact', dist(h,'wife_reaction','husband'), C_WIFE(), false,
     'Only asked where the couple discussed the idea since May.');
 
-  // The same fact — her concern — as she reports it and as he reports it.
-  concernPair('chartWConcern', 'wife_concern_1',
-              "As the wife reports it", "As the husband reports it");
-  concernPair('chartHConcern', 'husband_concern_1',
-              "As the wife reports it", "As the husband reports it");
-
-  const c2 = byRole('wife_concern_2','wife');
-  roleBar('chartConcern2', c2, { horizontal:true });
-
-  roleBar('chartDiscussFam', byRole('discuss_family','wife'));
+  // The same fact — her concern, then his — as each spouse reports it.
+  concernPair('chartWConcern', 'wife_concern_1',    'As the wife reports it', 'As the husband reports it');
+  concernPair('chartHConcern', 'husband_concern_1', 'As the wife reports it', 'As the husband reports it');
   roleBar('chartFamConcern', byRole('family_concern_1','wife'), { horizontal:true });
 }
+
 /** One concern variable, charted from both spouses' answers on a shared axis. */
 function concernPair(id, v, labelW, labelH){
   const dw = dist(rows('Wife'), v, 'wife'), dh = dist(rows('Husband'), v, 'husband');
@@ -623,20 +610,27 @@ function concernPair(id, v, labelW, labelH){
   const labels = order.filter(l => dw.some(x=>x.label===l&&x.value) || dh.some(x=>x.label===l&&x.value));
   if (!labels.length) return noData(id);
   const pick = (d,l) => { const it = d.find(x=>x.label===l); return it ? it.value : 0; };
+  const pc = (d,l) => d.n ? Math.round(1000*pick(d,l)/d.n)/10 : 0;
+  const usePct = SHOWPCT, sfx = usePct ? '%' : '';
   fitHeight(id, labels.length, 54, 70);
   mk(id, { type:'bar',
     data:{ labels:labels, datasets:[
-      { label:labelW + ' (n=' + dw.n + ')', data:labels.map(l => dw.n ? Math.round(1000*pick(dw,l)/dw.n)/10 : 0),
+      { label:labelW + ' (n=' + dw.n + ')', data:labels.map(l => usePct ? pc(dw,l) : pick(dw,l)),
         backgroundColor:C_WIFE(), borderRadius:5, maxBarThickness:22 },
-      { label:labelH + ' (n=' + dh.n + ')', data:labels.map(l => dh.n ? Math.round(1000*pick(dh,l)/dh.n)/10 : 0),
+      { label:labelH + ' (n=' + dh.n + ')', data:labels.map(l => usePct ? pc(dh,l) : pick(dh,l)),
         backgroundColor:C_HUSB(), borderRadius:5, maxBarThickness:22 } ]},
     options: baseOpts({ indexAxis:'y',
       layout:{ padding:{ top:4, right:58 } },
       plugins:{ legend:{ position:'top', align:'end', labels:{ font:FONT, color:TXT(), boxWidth:13, padding:11 } },
-        tooltip:{ callbacks:{ label: c => ' ' + c.dataset.label.replace(/ \(n=\d+\)/,'') + ': ' + c.raw + '%' } },
+        tooltip:{ callbacks:{ label: c => {
+          const wife = c.datasetIndex === 0, d = wife ? dw : dh, l = labels[c.dataIndex];
+          return ' ' + c.dataset.label.replace(/ \(n=\d+\)/,'') + ': ' + pick(d,l) + ' of ' + d.n +
+                 '  (' + pc(d,l) + '%)'; } } },
         datalabels:{ display:true, anchor:'end', align:'right', clamp:true, clip:false, color:TXT(),
-                     font:{family:'Inter',size:10.5,weight:'700'}, formatter: v2 => v2 ? v2 + '%' : '' } },
-      scales:{ x:{ beginAtZero:true, max:100, ticks:{ font:{family:'Inter',size:11}, color:TXT(), callback:v2=>v2+'%' },
+                     font:{family:'Inter',size:10.5,weight:'700'},
+                     formatter: v2 => v2 ? v2 + sfx : '' } },
+      scales:{ x:{ beginAtZero:true, max: usePct ? 100 : undefined, grace: usePct ? undefined : '14%',
+                   ticks:{ font:{family:'Inter',size:11}, color:TXT(), callback:v2=>v2+sfx },
                    grid:{color:GRID()}, border:{display:false} },
         y:{ ticks:{ font:{family:'Inter',size:11}, color:TXT(), autoSkip:false, maxRotation:0,
                     callback:function(vv){ return wrapTick(this.getLabelForValue(vv), 30); } },
@@ -645,51 +639,10 @@ function concernPair(id, v, labelW, labelH){
 }
 
 // ============================================================================
-//  08 · WORKSHOP
-// ============================================================================
-function drawWorkshop(){
-  const w = rows('Wife'), h = rows('Husband'), all = rows('all');
-  const att = shareOf(w,'w_participate',['Yes']);
-  const attH = shareOf(h,'w_participate',['Yes']);
-  const contacted = all.filter(r => r.contact_post === 'Yes').length;
-
-  set('ws-kpis',
-    kpi('🎓', (att||0) + '%', 'Attended the Workshop', 'As the wife reports it', 'neutral', 'purple') +
-    kpi('👨', (attH||0) + '%', 'Attended — Husband’s Account', 'Same question, husband round', 'navy', 'navy') +
-    kpi('😔', shareOf(w,'wish_attend',['Yes']) == null ? '—' : shareOf(w,'wish_attend',['Yes']) + '%',
-        'Wish They Had Attended', 'Among wives who did not go', 'neutral', 'amber') +
-    kpi('📞', contacted, 'Contacted by an Employer or NGO', 'Following the workshop',
-        contacted ? 'up' : 'down', contacted ? 'green' : 'teal') +
-    kpi('📄', all.filter(r => r.offer_post === 'Yes').length, 'Job Offers After the Workshop',
-        'Among those contacted', 'neutral', ''));
-
-  const nonAtt = dist(w,'reason_noattend','wife');
-  set('ws-insights',
-    box('teal', `<strong>Attendance:</strong> ${att || 0}% of wives say they went to the May workshop.
-      ${nonAtt.length ? `Among those who did not, the most common reason given is
-      <strong>“${nonAtt[0].label}”</strong> (${nonAtt[0].value} of ${nonAtt.n}).` : ''}`) +
-    box(contacted ? 'green' : 'amber', contacted
-      ? `<strong>Follow-up is happening:</strong> ${contacted} respondent${contacted===1?'':'s'} report being
-         contacted by an employer or NGO after the workshop — the first sign that the workshop channel converts.`
-      : `<strong>No employer follow-up yet:</strong> nobody in the interviews collected so far reports being
-         contacted by an employer or NGO after the workshop. Worth watching as the sample grows.`));
-
-  roleBar('chartWs1', byRole('w_participate','wife'));
-  distBar('chartWish', dist(w,'wish_attend','wife'), S(4), false,
-    'Only asked of wives who did not attend.');
-  roleBar('chartNoAttend', byRole('reason_noattend','wife'), { horizontal:true,
-    msg:'Every wife interviewed so far attended the workshop, so this question was never reached.' });
-  distBar('chartAccomp', dist(all,'w_accompany','wife'), S(5), false,
-    'Only asked of respondents who attended the workshop.');
-  roleBar('chartContact', byRole('contact_post','wife'), { msg:'Only asked of respondents who attended the workshop.' });
-  distBar('chartIntPost',   dist(all,'int_post','wife'),   S(3), false,
-    'Only asked of respondents contacted by an employer after the workshop.');
-  donutChart('chartOfferPost', dist(all,'offer_post','wife'), [S(6), S(2)],
-    'Only asked of respondents contacted by an employer after the workshop.');
-}
-
-// ============================================================================
-//  09 · MOBILITY & AGENCY
+//  07 · MOBILITY, DECISIONS & ACCESS
+//  Bank account and phone ownership are agency measures, so they sit with
+//  mobility rather than carrying a tab of their own. Mobile-wallet routing is
+//  payment admin, not a research finding, and lives in the Data Explorer.
 // ============================================================================
 const DECISIONS = [
   ['decision_making_1', 'Healthcare for herself'],
@@ -701,28 +654,38 @@ function drawMobility(){
   const alone = shareOf(all,'trip_company',['Alone']);
   const joint = shareOf(all,'decision_making_2',['Wife and Husband jointly']);
   const wifeAlone = shareOf(all,'decision_making_1',['Wife alone']);
+  const noTrip = shareOf(all,'n_trips',['0 times']);
+  const bank = shareOf(w,'bank',['Yes']), ownPhone = shareOf(w,'mobile_owner',['Self']);
 
   set('mob-kpis',
     kpi('🚶', (alone||0) + '%', 'Went to the Market Alone', 'Most recent trip, both rounds', 'up', 'teal') +
-    kpi('🛒', shareOf(all,'n_trips',['0 times']) == null ? '—' : (100 - shareOf(all,'n_trips',['0 times'])) + '%',
-        'Left Home for the Market', 'At least once in the past 7 days', 'up', 'green') +
+    kpi('🛒', noTrip == null ? '—' : (100 - noTrip) + '%', 'Left Home for the Market',
+        'At least once in the past 7 days', 'up', 'green') +
     kpi('🤝', (joint||0) + '%', 'Large Purchases Decided Jointly', 'Wife and husband together', 'neutral', 'navy') +
-    kpi('👩', (wifeAlone||0) + '%', 'Wife Decides Her Own Healthcare', 'On her own', wifeAlone ? 'up' : 'down', 'purple') +
-    kpi('🚌', shareOf(all,'trip_how',['Walk']) + '%', 'Travel on Foot', 'Usual mode to the market', 'navy', 'amber'));
+    kpi('👩', (wifeAlone||0) + '%', 'Wife Decides Her Own Healthcare', 'On her own',
+        wifeAlone ? 'up' : 'down', 'purple') +
+    kpi('🏦', bank == null ? '—' : bank + '%', 'Bank Account in Her Own Name', 'Wife round',
+        bank ? 'up' : 'down', bank ? 'green' : '') +
+    kpi('📱', ownPhone == null ? '—' : ownPhone + '%', 'Owns the Phone She Uses',
+        'Rather than borrowing it', ownPhone ? 'up' : 'down', 'amber'));
 
   set('mob-insights',
     box('teal', `<strong>Physical mobility is not the constraint it is often assumed to be:</strong>
-      ${alone || 0}% of respondents say the wife made her most recent market trip alone, and almost everyone
-      left the house at least once in the past week. The limits show up in <em>decisions</em>, not in movement.`) +
-    box('navy', `<strong>Decisions are joint, not unilateral:</strong> ${joint || 0}% report that large household
-      purchases are decided by the wife and husband together, with very few decisions taken by either spouse alone.`));
+      ${alone || 0}% of respondents say the wife made her most recent market trip alone, and almost everyone left the
+      house at least once in the past week. The limits show up in <em>decisions</em> and in <em>independent access to
+      money</em>, not in movement.`) +
+    box(bank ? 'navy' : 'primary', bank
+      ? `<strong>Decisions and access:</strong> ${joint || 0}% report that large household purchases are decided
+         jointly, and ${bank}% of wives hold a bank account in their own name.`
+      : `<strong>No wife interviewed so far holds a bank account in her own name.</strong> Mobile phone use is
+         near-universal, but only ${ownPhone || 0}% own the handset they use — so the digital channel exists while
+         independent control of money does not. Decisions are made jointly (${joint || 0}% for large purchases)
+         rather than by either spouse alone.`));
 
   roleBar('chartTrips',   byRole('n_trips','wife'));
   roleBar('chartTripsF',  byRole('ntrips_friends','wife'));
-  roleBar('chartTripCo',  byRole('trip_company','wife'),   { horizontal:true });
-  roleBar('chartTripFCo', byRole('trip_f_company','wife'), { horizontal:true });
+  roleBar('chartTripCo',  byRole('trip_company','wife'), { horizontal:true });
   roleBar('chartTripHow', byRole('trip_how','wife'));
-  roleBar('chartTripFHow',byRole('trip_f_how','wife'));
 
   // Every decision domain × every decision-maker × both rounds, on one grid.
   const makers = optionOrder('wife','decision_making_1') || [];
@@ -730,131 +693,16 @@ function drawMobility(){
   DECISIONS.forEach(([, lab]) => { labels.push(lab + ' — wife round'); labels.push(lab + ' — husband round'); });
   const series = makers.map((mk_, i) => ({
     name: mk_, color: PALETTE()[i % 8],
-    data: DECISIONS.flatMap(([v]) => [
-      shareOf(w, v, [mk_]) || 0,
-      shareOf(h, v, [mk_]) || 0 ])
+    data: DECISIONS.flatMap(([v]) => [ shareOf(w, v, [mk_]) || 0, shareOf(h, v, [mk_]) || 0 ])
   })).filter(s => s.data.some(x => x > 0));
   stackedBar('chartDecision', labels, series, { horizontal:true, per:40, suffix:'%', minLabel:4 });
 
-  DECISIONS.forEach(([v], i) => roleBar('chartDec' + (i+1), byRole(v,'wife')));
-}
-
-// ============================================================================
-//  10 · TIME USE
-// ============================================================================
-function drawTimeUse(){
-  const w = rows('Wife'), h = rows('Husband'), cps = couples();
-  // Two independent estimates of the same quantity: what she does, what he does.
-  const wSelfCh = meanOf(w,'own_chores'), wSelfCa = meanOf(w,'own_care');
-  const wByHCh  = meanOf(h,'sp_chores'),  wByHCa  = meanOf(h,'sp_care');
-  const hSelfCh = meanOf(h,'own_chores'), hSelfCa = meanOf(h,'own_care');
-  const hByWCh  = meanOf(w,'sp_chores'),  hByWCa  = meanOf(w,'sp_care');
-  const wSelf = (wSelfCh||0)+(wSelfCa||0), wByH = (wByHCh||0)+(wByHCa||0);
-  const hSelf = (hSelfCh||0)+(hSelfCa||0), hByW = (hByWCh||0)+(hByWCa||0);
-  const paid = meanOf(w.filter(r=>r.current_work_status==='Yes'), 'current_work_hrs') || 0;
-
-  set('tu-kpis',
-    kpi('👩', fmt1(wSelf) + ' hr', "Wife's Unpaid Work per Day", 'As she reports it', 'neutral', 'purple') +
-    kpi('👨', fmt1(hSelf) + ' hr', "Husband's Unpaid Work per Day", 'As he reports it', 'neutral', 'navy') +
-    kpi('🔎', (wByH >= wSelf ? '+' : '') + fmt1(wByH - wSelf) + ' hr', 'How He Scores Her Time',
-        'Husband’s estimate minus her own', Math.abs(wByH-wSelf) < .5 ? 'up' : 'neutral', 'teal') +
-    kpi('🔍', (hByW >= hSelf ? '+' : '') + fmt1(hByW - hSelf) + ' hr', 'How She Scores His Time',
-        'Wife’s estimate minus his own', Math.abs(hByW-hSelf) < .5 ? 'up' : 'down', 'amber') +
-    kpi('🧵', fmt1(paid) + ' hr', 'Paid Home-Based Work per Day', 'Among wives still working', 'navy', 'green') +
-    kpi('📊', fmt1(wSelf + paid) + ' hr', "Wife's Total Working Day", 'Paid plus unpaid', 'down', ''));
-
-  const gapW = wByH - wSelf, gapH = hByW - hSelf;
-  set('tu-insights',
-    box('purple', `<strong>The wife carries roughly ${fmt1(wSelf + paid)} hours of work a day</strong> —
-      ${fmt1(paid)} hours of paid home-based garment work on top of ${fmt1(wSelf)} hours of chores and care.
-      Her husband reports ${fmt1(hSelf)} hours of unpaid work.`) +
-    box(Math.abs(gapW) > 1 || Math.abs(gapH) > 1 ? 'amber' : 'green',
-      `<strong>Cross-reporting:</strong> husbands estimate their wife's unpaid work at
-       <strong>${fmt1(wByH)} hours</strong> against the <strong>${fmt1(wSelf)} hours</strong> she claims herself
-       (${gapW >= 0 ? '+' : ''}${fmt1(gapW)}), while wives estimate their husband's at
-       <strong>${fmt1(hByW)} hours</strong> against the <strong>${fmt1(hSelf)} hours</strong> he claims
-       (${gapH >= 0 ? '+' : ''}${fmt1(gapH)}). ${Math.abs(gapW) > 1 || Math.abs(gapH) > 1
-        ? 'Gaps this size mean at least one side of the household is systematically mis-counting who does the work.'
-        : 'The two accounts line up closely, which is a good sign for the reliability of the time-use module.'}`));
-
-  stackedBar('chartTimeGap',
-    ["Wife's time — her account", "Wife's time — his account", "Husband's time — his account", "Husband's time — her account"],
-    [ { name:'Household chores', color:S(1), data:[wSelfCh||0, wByHCh||0, hSelfCh||0, hByWCh||0].map(x=>Math.round(x*100)/100) },
-      { name:'Care of children & elderly', color:S(4), data:[wSelfCa||0, wByHCa||0, hSelfCa||0, hByWCa||0].map(x=>Math.round(x*100)/100) } ],
-    { horizontal:true, per:56, suffix:' hr', minLabel:0.2 });
-
-  roleBar('chartChores', byRole('own_chores_hr','wife'),
-          { pct:false, xTitle:'Hours per day reported', yTitle:'Respondents' });
-  roleBar('chartCare',   byRole('own_care_hr','wife'),
-          { pct:false, xTitle:'Hours per day reported', yTitle:'Respondents' });
-
-  const tot = [{ label:'Wife round', value:Math.round(wSelf*100)/100 },
-               { label:'Husband round', value:Math.round(hSelf*100)/100 }];
-  tot.n = w.length + h.length;
-  barChart('chartTotalUnpaid', tot, [C_WIFE(), C_HUSB()], false, ' hr');
-
-  const fd = [{ label:'Paid home-based work', value:Math.round(paid*100)/100 },
-              { label:'Household chores', value:Math.round((wSelfCh||0)*100)/100 },
-              { label:'Care of children & elderly', value:Math.round((wSelfCa||0)*100)/100 }];
-  fd.n = w.length;
-  barChart('chartFullDay', fd, S(5), false, ' hr');
-
-  const gr = cps.map(c => ({
-    label:'Couple ' + c.id,
-    wife: Math.round(((c.h.sp_total||0) - (c.w.own_total||0)) * 100)/100,
-    husb: Math.round(((c.w.sp_total||0) - (c.h.own_total||0)) * 100)/100
-  })).sort((a,b) => a.wife - b.wife);
-  if (!gr.length) { noData('chartGapCouple'); }
-  else stackedBar('chartGapCouple', gr.map(x=>x.label), [
-      { name:'Gap on the wife’s hours (his estimate − her own)', color:C_WIFE(), data:gr.map(x=>x.wife) },
-      { name:'Gap on the husband’s hours (her estimate − his own)', color:C_HUSB(), data:gr.map(x=>x.husb) }
-    ], { horizontal:true, per:34, suffix:' hr', minLabel:-99 });
-  const gc = Chart.getChart(document.getElementById('chartGapCouple'));
-  if (gc){ gc.options.scales.x.stacked = false; gc.options.scales.y.stacked = false;
-           gc.data.datasets.forEach(d => d.stack = undefined); gc.update(); }
-}
-
-// ============================================================================
-//  11 · FINANCIAL ACCESS
-// ============================================================================
-function drawFinance(){
-  const w = rows('Wife'), all = rows('all');
-  const bank = shareOf(w,'bank',['Yes']), mob = shareOf(w,'mobile_use',['Yes']);
-  const ownPhone = shareOf(w,'mobile_owner',['Self']);
-  const ownWallet = shareOf(all,'owns_mobile_wallet',['self']);
-
-  set('fin-kpis',
-    kpi('🏦', bank == null ? '—' : bank + '%', 'Bank Account in Her Own Name', 'Wife round', bank ? 'up' : 'down',
-        bank ? 'green' : '') +
-    kpi('📱', mob == null ? '—' : mob + '%', 'Uses a Mobile Phone', 'Wife round', 'up', 'teal') +
-    kpi('🔑', ownPhone == null ? '—' : ownPhone + '%', 'Owns the Phone She Uses', 'Rather than borrowing it',
-        ownPhone ? 'up' : 'down', ownPhone ? 'green' : 'amber') +
-    kpi('💳', ownWallet == null ? '—' : ownWallet + '%', 'Wallet Registered to the Respondent',
-        'For the survey payment', 'neutral', 'purple') +
-    kpi('📶', (dist(all,'network','wife')[0] || {}).label || '—', 'Most Common Network',
-        'Among numbers provided', 'navy', 'navy', true));
-
-  set('fin-insights',
-    box(bank ? 'navy' : 'primary',
-      bank ? `<strong>Financial access:</strong> ${bank}% of wives hold a bank account in their own name.`
-           : `<strong>No wife interviewed so far holds a bank account in her own name.</strong> Mobile phone use is
-              near-universal at ${mob || 0}%, but ${ownPhone || 0}% own the handset they use — so the digital channel
-              exists while independent control of money does not.`) +
-    box('teal', `<strong>Payment routing:</strong> where the survey payment could not be sent to the respondent's
-      own wallet it had to be routed through a family member's number. The two charts on the right show whose
-      account actually received it.`));
-
   donutChart('chartBank',   dist(w,'bank','wife'), [S(6), S(2)]);
   donutChart('chartMobUse', dist(w,'mobile_use','wife'), [S(6), S(2), MUTED()]);
-  distBar('chartMobOwn',   dist(w,'mobile_owner','wife'), S(5), true);
-  distBar('chartWalletOwn',dist(all,'owns_mobile_wallet','wife'), S(1), true);
-  donutChart('chartWalletType', dist(all,'type_wallet','wife'), PALETTE());
-  donutChart('chartNetwork', dist(all,'network','wife'), PALETTE(),
-    'Network was only recorded where a usable mobile-wallet number was given.');
+  distBar('chartMobOwn',    dist(w,'mobile_owner','wife'), S(5), true);
 }
-
 // ============================================================================
-//  12 · SPOUSAL AGREEMENT
+//  08 · SPOUSAL AGREEMENT
 // ============================================================================
 const CONCORD = [
   ['w_participate',       'Did the wife attend the May workshop?',                'Workshop'],
@@ -1037,7 +885,7 @@ function exportConcord(){
 }
 
 // ============================================================================
-//  13 · DATA EXPLORER & CODEBOOK
+//  09 · DATA EXPLORER & CODEBOOK
 // ============================================================================
 function analysable(form){
   const rs = form === 'wife' ? WIFE() : HUSB();

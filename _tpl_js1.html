@@ -105,6 +105,32 @@ function syncHeaderHeight(){
   if (h) document.documentElement.style.setProperty('--hdr-h', h.offsetHeight + 'px');
 }
 
+/* Collapse the masthead once the reader starts scrolling, so the pinned
+   furniture costs a slim strip instead of half the screen. The threshold has
+   hysteresis: without it a header that shrinks can pull the page back above
+   the trigger point and oscillate. */
+function initStickyHeader(){
+  const h = document.getElementById('siteHeader');
+  // A restored session and a manual unlock can both reach renderAll, so guard
+  // against binding twice — two listeners racing produced a header that stuck
+  // collapsed at the top of the page.
+  if (!h || h.dataset.stickyBound) return;
+  h.dataset.stickyBound = '1';
+  let ticking = false;
+  // The class is the single source of truth; a separate boolean can desync
+  // from it and then neither branch ever fires.
+  const apply = () => {
+    ticking = false;
+    const y = window.scrollY, on = h.classList.contains('compact');
+    if (!on && y > 90)      { h.classList.add('compact');    syncHeaderHeight(); }
+    else if (on && y < 30)  { h.classList.remove('compact'); syncHeaderHeight(); }
+  };
+  window.addEventListener('scroll', () => {
+    if (!ticking) { ticking = true; requestAnimationFrame(apply); }
+  }, { passive:true });
+  apply();
+}
+
 // ============================================================================
 //  DATA ACCESS  —  filters + aggregation
 // ============================================================================
