@@ -1,0 +1,650 @@
+<script>
+// ============================================================================
+//  POST-WORKSHOP HBW SURVEY DASHBOARD
+//  Research Solutions (M&A Research Solutions LLC) · www.rs.org.pk
+//  Built __BUILD_STAMP__
+// ============================================================================
+
+// The whole labelled micro-dataset, AES-256-GCM encrypted under the dashboard
+// password. Nothing here is readable until a correct password derives the key.
+const ENC = /*__PAYLOAD__*/;
+
+let DB = null;                       // decrypted payload
+let FILT = { date:'all', enum:'all', area:'all', sample:'all' };
+
+// ============================================================================
+//  ACCESS GATE  —  password *is* the decryption key, not a check against a string
+// ============================================================================
+const b64d = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+
+async function decryptPayload(password){
+  if (ENC.v === 0) return JSON.parse(new TextDecoder().decode(b64d(ENC.plain)));
+  const enc = new TextEncoder();
+  const base = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey(
+    { name:'PBKDF2', salt:b64d(ENC.salt), iterations:ENC.iter, hash:'SHA-256' },
+    base, { name:'AES-GCM', length:256 }, false, ['decrypt']);
+  const out = await crypto.subtle.decrypt({ name:'AES-GCM', iv:b64d(ENC.iv) }, key, b64d(ENC.ct));
+  return JSON.parse(new TextDecoder().decode(out));
+}
+
+async function checkAuth(){
+  const input = document.getElementById('auth-pw');
+  const err   = document.getElementById('auth-error');
+  const btn   = document.getElementById('auth-btn');
+  if (!input.value) { err.textContent = 'Please enter the access password.'; return; }
+  btn.disabled = true; btn.textContent = 'Unlocking…'; err.textContent = '';
+  try {
+    DB = await decryptPayload(input.value);
+    try { sessionStorage.setItem('hbw_pw', input.value); } catch(e){}
+    document.getElementById('auth-gate').style.display = 'none';
+    document.getElementById('site-content').style.display = 'block';
+    renderAll();
+  } catch(e){
+    btn.disabled = false; btn.textContent = 'Open Dashboard →';
+    err.textContent = 'Incorrect password — the data could not be decrypted.';
+    input.classList.add('error'); input.value = ''; input.focus();
+    setTimeout(()=>input.classList.remove('error'), 400);
+  }
+}
+
+// A password held for this browser tab re-opens the dashboard without retyping.
+window.addEventListener('DOMContentLoaded', async () => {
+  let pw = null;
+  try { pw = sessionStorage.getItem('hbw_pw'); } catch(e){}
+  if (!pw) return;
+  try {
+    DB = await decryptPayload(pw);
+    document.getElementById('auth-gate').style.display = 'none';
+    document.getElementById('site-content').style.display = 'block';
+    renderAll();
+  } catch(e){ try { sessionStorage.removeItem('hbw_pw'); } catch(_){} }
+});
+
+// ============================================================================
+//  NAVIGATION & THEME
+// ============================================================================
+function showPanel(id, btn){
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  btn.classList.add('active');
+  window.scrollTo({ top:0, behavior:'smooth' });
+  drawPanel(id);
+}
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme', t);
+  const dark = t === 'dark';
+  const i = document.getElementById('themeIcon'), x = document.getElementById('themeTxt');
+  if (i) i.textContent = dark ? '☀️' : '🌙';
+  if (x) x.textContent = dark ? 'Light' : 'Dark';
+  try { localStorage.setItem('hbw_theme', t); } catch(e){}
+}
+function toggleTheme(){
+  applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  if (DB) redrawEverything();
+}
+(function initTheme(){
+  let t = null;
+  try { t = localStorage.getItem('hbw_theme'); } catch(e){}
+  if (!t) t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+  applyTheme(t);
+})();
+
+// The filter bar sticks directly beneath the header, whose height depends on
+// how far the tab strip wraps — so measure it rather than hard-coding it.
+function syncHeaderHeight(){
+  const h = document.getElementById('siteHeader');
+  if (h) document.documentElement.style.setProperty('--hdr-h', h.offsetHeight + 'px');
+}
+
+// ============================================================================
+//  DATA ACCESS  —  filters + aggregation
+// ============================================================================
+const WIFE = () => (DB ? DB.wife : []);
+const HUSB = () => (DB ? DB.husband : []);
+
+function passes(r){
+  if (FILT.date   !== 'all' && r.date        !== FILT.date)   return false;
+  if (FILT.enum   !== 'all' && r.enum_name   !== FILT.enum)   return false;
+  if (FILT.area   !== 'all' && r.area        !== FILT.area)   return false;
+  if (FILT.sample !== 'all' && r.sampletype  !== FILT.sample) return false;
+  return true;
+}
+/** role: 'Wife' | 'Husband' | 'all' */
+function rows(role){
+  const src = role === 'Wife' ? WIFE() : role === 'Husband' ? HUSB() : WIFE().concat(HUSB());
+  return src.filter(passes);
+}
+/** Couples where both spouses were interviewed *and* both pass the filters. */
+function couples(){
+  const w = new Map(), out = [];
+  rows('Wife').forEach(r => w.set(r.couple_id, r));
+  rows('Husband').forEach(h => { if (w.has(h.couple_id)) out.push({ id:h.couple_id, w:w.get(h.couple_id), h:h }); });
+  return out;
+}
+
+/** Question metadata straight from the SurveyCTO form definition. */
+function meta(form, v){ return (DB && DB.questions[form] && DB.questions[form][v]) || null; }
+function qtext(form, v){ const q = meta(form, v); return q ? q.text : ''; }
+/** The answer options in the order the questionnaire lists them. */
+function optionOrder(form, v){
+  const q = meta(form, v);
+  if (!q || !q.list) return null;
+  const list = DB.choices[form] && DB.choices[form][q.list];
+  return list ? list.map(o => o.label) : null;
+}
+
+/**
+ * Frequency of `v` across `rs`, ordered by the questionnaire's own option order
+ * so a five-point scale never comes back shuffled. Multi-select variables hold
+ * arrays, and each selection counts once.
+ */
+function dist(rs, v, form, opts){
+  opts = opts || {};
+  const counts = new Map();
+  let n = 0;
+  rs.forEach(r => {
+    const val = r[v];
+    if (val === undefined || val === null || val === '') return;
+    n++;
+    (Array.isArray(val) ? val : [val]).forEach(x => {
+      const k = String(x);
+      counts.set(k, (counts.get(k) || 0) + 1);
+    });
+  });
+  const order = form ? optionOrder(form, v) : null;
+  let out;
+  if (order){
+    out = order.filter(l => opts.showZero || counts.has(l)).map(l => ({ label:l, value:counts.get(l) || 0 }));
+    // Anything recorded that is not in the option list still has to show up.
+    counts.forEach((val, k) => { if (!order.includes(k)) out.push({ label:k, value:val }); });
+  } else {
+    out = [...counts.entries()].map(([label, value]) => ({ label, value }));
+    const num = out.every(x => /^-?\d+(\.\d+)?$/.test(x.label));
+    out.sort(num ? (a,b) => parseFloat(a.label) - parseFloat(b.label) : (a,b) => b.value - a.value);
+  }
+  out.n = n;
+  return out;
+}
+/** Same shape as dist(), but values are percentages of respondents. */
+function distPct(rs, v, form, opts){
+  const d = dist(rs, v, form, opts), n = d.n || 1;
+  const out = d.map(x => ({ label:x.label, value:Math.round(1000 * x.value / n) / 10 }));
+  out.n = d.n;
+  return out;
+}
+/** Wife and husband distributions aligned on one shared label axis. */
+function byRole(v, form, opts){
+  const w = dist(rows('Wife'), v, 'wife', opts), h = dist(rows('Husband'), v, 'husband', opts);
+  const order = optionOrder(form || 'wife', v);
+  const labels = order ? order.slice() : [];
+  [w, h].forEach(d => d.forEach(x => { if (!labels.includes(x.label)) labels.push(x.label); }));
+  const keep = labels.filter(l => (opts && opts.showZero) ||
+    w.some(x => x.label === l && x.value) || h.some(x => x.label === l && x.value));
+  // Numeric answers (hours, counts) carry no questionnaire option order, and
+  // merging two rounds' labels leaves them interleaved — put them back in order.
+  if (keep.length && keep.every(l => /^-?\d+(\.\d+)?$/.test(l)))
+    keep.sort((a, b) => parseFloat(a) - parseFloat(b));
+  const pick = (d, l) => { const it = d.find(x => x.label === l); return it ? it.value : 0; };
+  return {
+    labels: keep,
+    wife:    keep.map(l => pick(w, l)),
+    husband: keep.map(l => pick(h, l)),
+    wifePct:    keep.map(l => w.n ? Math.round(1000 * pick(w, l) / w.n) / 10 : 0),
+    husbandPct: keep.map(l => h.n ? Math.round(1000 * pick(h, l) / h.n) / 10 : 0),
+    nw: w.n, nh: h.n
+  };
+}
+const nums  = (rs, v) => rs.map(r => r[v]).filter(x => typeof x === 'number' && isFinite(x));
+const mean  = a => a.length ? a.reduce((s,x)=>s+x,0) / a.length : null;
+const med   = a => { if(!a.length) return null; const s=[...a].sort((x,y)=>x-y), m=s.length>>1;
+                     return s.length % 2 ? s[m] : (s[m-1]+s[m])/2; };
+const meanOf = (rs, v) => mean(nums(rs, v));
+/** Share of `rs` answering `v` with any of `vals`, as a rounded percentage. */
+function shareOf(rs, v, vals){
+  const answered = rs.filter(r => r[v] !== undefined && r[v] !== null && r[v] !== '');
+  if (!answered.length) return null;
+  const hit = answered.filter(r => vals.includes(r[v])).length;
+  return Math.round(1000 * hit / answered.length) / 10;
+}
+const countOf = (rs, v, vals) => rs.filter(r => vals.includes(r[v])).length;
+/** Bucket a numeric variable into fixed-width bands with readable edge labels. */
+function band(rs, v, width, unit, cap){
+  const vals = nums(rs, v);
+  const counts = new Map();
+  vals.forEach(x => {
+    const b = Math.floor(x / width) * width;
+    const key = (cap != null && b >= cap) ? cap : b;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  const out = [...counts.entries()].sort((a,b) => a[0] - b[0]).map(([b, c]) => ({
+    label: (cap != null && b >= cap) ? (fmtNum(b) + (unit||'') + '+')
+                                     : (fmtNum(b) + '–' + fmtNum(b + width) + (unit||'')),
+    value: c
+  }));
+  out.n = vals.length;
+  return out;
+}
+const fmtNum = n => n >= 1000 ? (n/1000) + 'k' : String(Math.round(n * 100) / 100);
+const fmt1 = x => (x == null ? '—' : (Math.round(x * 10) / 10).toLocaleString());
+const fmtRs = x => (x == null ? '—' : 'Rs ' + Math.round(x).toLocaleString());
+const pctOf = (a, b) => b ? Math.round(100 * a / b) : 0;
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c =>
+  ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+
+// ============================================================================
+//  CHART FOUNDATION
+// ============================================================================
+Chart.register(ChartDataLabels);
+
+const CV = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const S  = i => CV('--series-' + i);
+const PALETTE = () => [S(1),S(2),S(3),S(4),S(5),S(6),S(7),S(8)];
+const TXT   = () => CV('--text-2')    || '#475569';
+const GRID  = () => CV('--grid')      || '#eef1f6';
+const MUTED = () => CV('--muted-fill')|| '#e2e8f0';
+const C_WIFE = () => CV('--wife'), C_HUSB = () => CV('--husband');
+const C_AGREE = () => CV('--agree'),  C_DIS = () => CV('--disagree');
+const FONT = { family:'Inter' };
+
+function baseOpts(extra){
+  return Object.assign({
+    responsive:true, maintainAspectRatio:false,
+    animation:{ duration:600 },
+    plugins:{
+      legend:{ labels:{ font:FONT, color:TXT(), boxWidth:14 } },
+      datalabels:{ display:false },
+      tooltip:{ backgroundColor:'rgba(30,36,56,.94)', titleFont:{family:'Inter',size:12,weight:'700'},
+                bodyFont:{family:'Inter',size:12}, padding:10, cornerRadius:8, displayColors:true,
+                boxPadding:4, titleMarginBottom:6 }
+    }
+  }, extra || {});
+}
+const L = a => a.map(x => x.label);
+const V = a => a.map(x => x.value);
+const SUM = a => a.reduce((s,x) => s + x.value, 0);
+
+/** Break a long option label over several lines so axis ticks stay readable. */
+function wrapTick(label, max){
+  max = max || 18;
+  const words = String(label).split(/\s+/), lines = []; let line = '';
+  for (const w of words){
+    if (line && (line + ' ' + w).length > max){ lines.push(line); line = w; }
+    else line = line ? line + ' ' + w : w;
+  }
+  if (line) lines.push(line);
+  return lines.length ? lines : [String(label)];
+}
+
+/** Create (or recreate) a chart and attach its export controls. */
+function mk(id, cfg, exportRows){
+  const el = document.getElementById(id);
+  if (!el) return null;
+  const prev = Chart.getChart(el);
+  if (prev) prev.destroy();
+  clearNoData(el);
+  const chart = new Chart(el, cfg);
+  attachTools(el, id, exportRows);
+  return chart;
+}
+/** Charts with nothing to show say so, rather than rendering an empty frame. */
+function noData(id, msg){
+  const el = document.getElementById(id);
+  if (!el) return true;
+  const prev = Chart.getChart(el);
+  if (prev) prev.destroy();
+  const wrap = el.closest('.chart-wrap');
+  if (!wrap) return true;
+  clearNoData(el);
+  el.style.display = 'none';
+  const d = document.createElement('div');
+  d.className = 'no-data';
+  d.textContent = msg || 'No responses recorded for this question yet — it is routed past for every interview collected so far.';
+  wrap.appendChild(d);
+  return true;
+}
+function clearNoData(el){
+  const wrap = el.closest('.chart-wrap');
+  if (!wrap) return;
+  wrap.querySelectorAll('.no-data').forEach(n => n.remove());
+  el.style.display = 'block';
+}
+/** Empty / all-zero guard used by every draw helper. */
+function empty(arr){ return !arr || !arr.length || SUM(arr) === 0; }
+
+function attachTools(canvas, id, exportRows){
+  const card = canvas.closest('.chart-card');
+  if (!card) return;
+  card.querySelectorAll('.card-tools').forEach(n => n.remove());
+  const box = document.createElement('div');
+  box.className = 'card-tools';
+
+  const png = document.createElement('button');
+  png.type = 'button'; png.textContent = '⤓';
+  png.title = 'Download this chart as a PNG image';
+  png.onclick = () => {
+    const c = Chart.getChart(canvas); if (!c) return;
+    const out = document.createElement('canvas');
+    out.width = c.canvas.width; out.height = c.canvas.height;
+    const ctx = out.getContext('2d');
+    ctx.fillStyle = CV('--surface') || '#fff';
+    ctx.fillRect(0, 0, out.width, out.height);
+    ctx.drawImage(c.canvas, 0, 0);
+    const a = document.createElement('a');
+    a.href = out.toDataURL('image/png');
+    a.download = 'hbw-dashboard_' + id + '.png';
+    a.click();
+  };
+  box.appendChild(png);
+
+  if (exportRows && exportRows.length){
+    const csv = document.createElement('button');
+    csv.type = 'button'; csv.textContent = '☰';
+    csv.title = 'Download the numbers behind this chart as a CSV';
+    csv.onclick = () => downloadCSV(exportRows, id);
+    box.appendChild(csv);
+  }
+  card.appendChild(box);
+}
+function downloadCSV(rows, name){
+  const q = s => '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"';
+  const cols = Object.keys(rows[0]);
+  const csv = cols.map(q).join(',') + '\n' +
+              rows.map(r => cols.map(c => q(r[c])).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type:'text/csv;charset=utf-8;' }));
+  a.download = 'hbw-dashboard_' + name + '_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+/** Give a horizontal-bar canvas a height that actually fits its categories. */
+function fitHeight(id, n, per, pad){
+  const el = document.getElementById(id); if (!el) return;
+  const wrap = el.closest('.chart-wrap');
+  if (wrap) wrap.style.height = (n * (per || 32) + (pad || 60)) + 'px';
+}
+const tblRows = arr => arr.map(x => ({ Answer:x.label, Respondents:x.value }));
+
+// ============================================================================
+//  CHART TYPES
+// ============================================================================
+function barChart(id, arr, color, horizontal, suffix, msg){
+  if (empty(arr)) return noData(id, msg);
+  const sfx = suffix || '';
+  const catWrap = horizontal ? 24 : 11;
+  const catTicks = { font:{family:'Inter',size:11}, color:TXT(), autoSkip:false, maxRotation:0, minRotation:0,
+                     callback:function(v){ return wrapTick(this.getLabelForValue(v), catWrap); } };
+  const valTicks = { font:{family:'Inter',size:11}, color:TXT(), callback: sfx ? (v => v + sfx) : undefined };
+  if (horizontal) fitHeight(id, arr.length, 36, 50);
+  const n = arr.n;
+  mk(id, { type:'bar',
+    data:{ labels:L(arr), datasets:[{ data:V(arr), backgroundColor:color, borderRadius:6, maxBarThickness:46 }] },
+    options: baseOpts({ indexAxis: horizontal ? 'y' : 'x',
+      layout:{ padding:{ top: horizontal ? 8 : 20, right: horizontal ? 52 : 8 } },
+      plugins:{ legend:{ display:false },
+        tooltip:{ callbacks:{ label: c => ' ' + c.raw + sfx + (n && !sfx ? '  (' + Math.round(100*c.raw/n) + '% of ' + n + ')' : '') } },
+        datalabels:{ display:true, anchor:'end', align: horizontal ? 'right' : 'top', clamp:true, clip:false,
+                     color:TXT(), font:{family:'Inter',size:11,weight:'700'}, formatter: v => v ? v + sfx : '' } },
+      scales:{
+        x:{ ticks: horizontal ? valTicks : catTicks, grid:{ display:!horizontal, color:GRID() }, border:{display:false},
+            ...(horizontal ? { beginAtZero:true, grace:'16%' } : {}) },
+        y:{ ticks: horizontal ? catTicks : valTicks, grid:{ display:!horizontal, color:GRID() }, border:{display:false},
+            beginAtZero:true, ...(horizontal ? {} : { grace:'16%' }) } } }) },
+    tblRows(arr));
+}
+
+function donutChart(id, arr, colors, msg){
+  if (empty(arr)) return noData(id, msg);
+  mk(id, { type:'doughnut',
+    data:{ labels:L(arr), datasets:[{ data:V(arr), backgroundColor: colors || PALETTE(),
+           borderWidth:2, borderColor: CV('--surface') || '#fff' }] },
+    options: baseOpts({ cutout:'58%',
+      plugins:{ legend:{ position:'right', labels:{ font:FONT, color:TXT(), boxWidth:12, padding:9,
+                  generateLabels: ch => Chart.overrides.doughnut.plugins.legend.labels.generateLabels(ch)
+                    .map(l => { const v = ch.data.datasets[0].data[l.index];
+                                l.text = wrapTick(l.text, 26).join(' ') + '  (' + v + ')'; return l; }) } },
+        tooltip:{ callbacks:{ label: c => { const t = c.dataset.data.reduce((a,b)=>a+b,0) || 1;
+                  return ' ' + c.raw + ' of ' + t + '  (' + Math.round(100*c.raw/t) + '%)'; } } },
+        datalabels:{ display:true, color:'#fff', font:{family:'Inter',size:12,weight:'700'},
+          formatter:(v,c) => { const t = c.dataset.data.reduce((a,b)=>a+b,0); const p = t ? Math.round(100*v/t) : 0;
+                               return p >= 7 ? p + '%' : ''; } } } }) },
+    tblRows(arr));
+}
+
+/** Wife vs husband on one shared axis — the dashboard's workhorse comparison. */
+function roleBar(id, cmp, opts){
+  opts = opts || {};
+  if (!cmp.labels.length || (!cmp.nw && !cmp.nh)) return noData(id, opts.msg);
+  const usePct = opts.pct !== false;
+  const wd = usePct ? cmp.wifePct : cmp.wife;
+  const hd = usePct ? cmp.husbandPct : cmp.husband;
+  const sfx = usePct ? '%' : '';
+  const horizontal = opts.horizontal;
+  if (horizontal) fitHeight(id, cmp.labels.length, 56, 66);
+  const sets = [];
+  if (!opts.only || opts.only === 'Wife')
+    sets.push({ label:'Wife round (n=' + cmp.nw + ')', data:wd, backgroundColor:C_WIFE(), borderRadius:5, maxBarThickness:34 });
+  if (!opts.only || opts.only === 'Husband')
+    sets.push({ label:'Husband round (n=' + cmp.nh + ')', data:hd, backgroundColor:C_HUSB(), borderRadius:5, maxBarThickness:34 });
+  const catTicks = { font:{family:'Inter',size:11}, color:TXT(), autoSkip:false, maxRotation:0, minRotation:0,
+                     callback:function(v){ return wrapTick(this.getLabelForValue(v), horizontal ? 26 : 13); } };
+  const valTicks = { font:{family:'Inter',size:11}, color:TXT(), callback: v => v + sfx };
+  const raw = usePct ? { w:cmp.wife, h:cmp.husband } : null;
+  mk(id, { type:'bar',
+    data:{ labels:cmp.labels, datasets:sets },
+    options: baseOpts({ indexAxis: horizontal ? 'y' : 'x',
+      layout:{ padding:{ top: horizontal ? 6 : 22, right: horizontal ? 56 : 8 } },
+      plugins:{ legend:{ position:'top', align:'end', labels:{ font:FONT, color:TXT(), boxWidth:13, padding:12 } },
+        tooltip:{ callbacks:{ label: c => {
+          const n = c.dataset.label.indexOf('Wife') === 0 ? cmp.nw : cmp.nh;
+          const cnt = raw ? (c.dataset.label.indexOf('Wife') === 0 ? raw.w[c.dataIndex] : raw.h[c.dataIndex]) : c.raw;
+          return ' ' + c.dataset.label.replace(/ \(n=\d+\)/,'') + ': ' + c.raw + sfx +
+                 (raw ? '  (' + cnt + ' of ' + n + ')' : ''); } } },
+        datalabels:{ display:true, anchor:'end', align: horizontal ? 'right' : 'top', clamp:true, clip:false,
+                     color:TXT(), font:{family:'Inter',size:10.5,weight:'700'},
+                     formatter: v => v ? v + sfx : '' } },
+      scales:{
+        x:{ ticks: horizontal ? valTicks : catTicks, grid:{ display:!horizontal, color:GRID() }, border:{display:false},
+            ...(opts.xTitle && !horizontal ? { title:{ display:true, text:opts.xTitle,
+                font:{family:'Inter',size:11,weight:'600'}, color:TXT() } } : {}),
+            ...(horizontal ? { beginAtZero:true, max: usePct ? 100 : undefined, grace:'12%' } : {}) },
+        y:{ ticks: horizontal ? catTicks : valTicks, grid:{ display:!horizontal, color:GRID() }, border:{display:false},
+            beginAtZero:true,
+            ...(opts.yTitle ? { title:{ display:true, text:opts.yTitle,
+                font:{family:'Inter',size:11,weight:'600'}, color:TXT() } } : {}),
+            ...(horizontal ? {} : { max: usePct ? 100 : undefined, grace: usePct ? undefined : '18%' }) } } }) },
+    cmp.labels.map((l,i) => ({ Answer:l, 'Wife n':cmp.wife[i], 'Wife %':cmp.wifePct[i],
+                               'Husband n':cmp.husband[i], 'Husband %':cmp.husbandPct[i] })));
+}
+
+function stackedBar(id, labels, series, opts){
+  opts = opts || {};
+  if (!labels.length) return noData(id, opts.msg);
+  const horizontal = opts.horizontal;
+  if (horizontal) fitHeight(id, labels.length, opts.per || 42, 70);
+  const sfx = opts.suffix || '';
+  mk(id, { type:'bar',
+    data:{ labels:labels, datasets: series.map(s => ({ label:s.name, data:s.data, backgroundColor:s.color,
+            borderRadius:4, maxBarThickness: opts.thick || 40, stack:'s' })) },
+    options: baseOpts({ indexAxis: horizontal ? 'y' : 'x',
+      layout:{ padding:{ top:10, right: horizontal ? 60 : 8 } },
+      plugins:{ legend:{ position:'top', align:'end', labels:{ font:FONT, color:TXT(), boxWidth:13, padding:11 } },
+        tooltip:{ callbacks:{ label: c => ' ' + c.dataset.label + ': ' + c.raw + sfx,
+                              footer: its => 'Total: ' + Math.round(its.reduce((s,i)=>s+i.raw,0)*10)/10 + sfx } },
+        datalabels:{ display: c => c.dataset.data[c.dataIndex] > (opts.minLabel || 0),
+                     color:'#fff', font:{family:'Inter',size:10.5,weight:'700'},
+                     formatter: v => Math.round(v*10)/10 + sfx } },
+      scales:{
+        x:{ stacked:true, beginAtZero:true, ticks:{ font:{family:'Inter',size:11}, color:TXT(), autoSkip:false, maxRotation:0,
+              callback: horizontal ? undefined : function(v){ return wrapTick(this.getLabelForValue(v), 16); } },
+            grid:{ display:!!horizontal, color:GRID() }, border:{display:false} },
+        y:{ stacked:true, beginAtZero:true, ticks:{ font:{family:'Inter',size:11}, color:TXT(), autoSkip:false, maxRotation:0,
+              callback: horizontal ? function(v){ return wrapTick(this.getLabelForValue(v), 24); } : undefined },
+            grid:{ display:!horizontal, color:GRID() }, border:{display:false} } } }) },
+    labels.map((l,i) => { const o = { Category:l }; series.forEach(s => o[s.name] = s.data[i]); return o; }));
+}
+
+function lineDaily(id, days){
+  if (!days.length) return noData(id);
+  let run = 0;
+  const cum = days.map(d => (run += d.couples));
+  mk(id, { type:'bar',
+    data:{ labels:days.map(d => d.date), datasets:[
+      { type:'bar',  label:'Wife interviews',    data:days.map(d=>d.w), backgroundColor:C_WIFE(), borderRadius:5, maxBarThickness:40, order:3 },
+      { type:'bar',  label:'Husband interviews', data:days.map(d=>d.h), backgroundColor:C_HUSB(), borderRadius:5, maxBarThickness:40, order:3 },
+      { type:'line', label:'Cumulative couples finished', data:cum, borderColor:S(6), backgroundColor:'rgba(23,145,66,.10)',
+        fill:true, tension:.3, pointBackgroundColor:S(6), pointRadius:4, pointHoverRadius:6, borderWidth:2.5, yAxisID:'y1', order:1 } ]},
+    options: baseOpts({
+      layout:{ padding:{ top:22 } },
+      plugins:{ legend:{ position:'top', align:'end', labels:{ font:FONT, color:TXT(), boxWidth:13, padding:12 } },
+        datalabels:{ display: c => c.dataset.type !== 'line' && c.dataset.data[c.dataIndex] > 0,
+                     anchor:'end', align:'top', color:TXT(), font:{family:'Inter',size:10.5,weight:'700'} } },
+      scales:{ x:{ ticks:{ font:{family:'Inter',size:11}, color:TXT() }, grid:{display:false}, border:{display:false} },
+        y:{ beginAtZero:true, grace:'22%', ticks:{ font:{family:'Inter',size:11}, color:TXT() }, grid:{color:GRID()},
+            border:{display:false}, title:{ display:true, text:'Interviews that day', font:{family:'Inter',size:11,weight:'600'}, color:TXT() } },
+        y1:{ position:'right', beginAtZero:true, grace:'22%', ticks:{ font:{family:'Inter',size:11}, color:TXT() },
+             grid:{display:false}, border:{display:false},
+             title:{ display:true, text:'Couples finished (cumulative)', font:{family:'Inter',size:11,weight:'600'}, color:TXT() } } } }) },
+    days.map((d,i) => ({ Date:d.date, 'Wife interviews':d.w, 'Husband interviews':d.h,
+                         'Couples finished that day':d.couples, 'Cumulative couples':cum[i] })));
+}
+
+function cumulativeChart(id, days, target){
+  if (!days.length) return noData(id);
+  let run = 0;
+  const cum = days.map(d => (run += d.couples));
+  mk(id, { type:'line',
+    data:{ labels:days.map(d => d.date), datasets:[
+      { label:'Couples finished (cumulative)', data:cum, borderColor:S(6), backgroundColor:'rgba(23,145,66,.12)',
+        fill:true, tension:.25, pointBackgroundColor:S(6), pointRadius:4, pointHoverRadius:7, borderWidth:2.5 },
+      { label:'Tracking frame (' + target + ' couples)', data:days.map(()=>target), borderColor:S(2),
+        borderDash:[7,5], borderWidth:2, pointRadius:0, fill:false } ]},
+    options: baseOpts({
+      layout:{ padding:{ top:20 } },
+      plugins:{ legend:{ position:'top', align:'end', labels:{ font:FONT, color:TXT(), boxWidth:14, padding:12 } },
+        datalabels:{ display: c => c.datasetIndex === 0, anchor:'end', align:'top', clamp:true, clip:false,
+                     color:TXT(), font:{family:'Inter',size:11,weight:'800'} },
+        tooltip:{ callbacks:{ label: c => ' ' + c.dataset.label.replace(/ \(.*\)/,'') + ': ' + c.raw.toLocaleString(),
+                              footer: its => pctOf(its[0].raw, target) + '% of the frame' } } },
+      scales:{ x:{ ticks:{ font:{family:'Inter',size:11}, color:TXT() }, grid:{display:false}, border:{display:false} },
+        y:{ beginAtZero:true, suggestedMax:target * 1.06, ticks:{ font:{family:'Inter',size:11}, color:TXT() },
+            grid:{color:GRID()}, border:{display:false} } } }) });
+}
+
+function progressDonut(id, done, target, unit){
+  const el = document.getElementById(id); if (!el) return;
+  mk(id, { type:'doughnut',
+    data:{ labels:['Finished','Remaining'], datasets:[{ data:[done, Math.max(target-done,0)],
+           backgroundColor:[S(6), MUTED()], borderWidth:0 }] },
+    options: baseOpts({ cutout:'72%',
+      plugins:{ legend:{ position:'bottom', labels:{ font:FONT, color:TXT(), boxWidth:12 } },
+        datalabels:{ display:false },
+        tooltip:{ callbacks:{ label: c => ' ' + c.label + ': ' + c.raw.toLocaleString() + ' ' + (unit||'') } } } }),
+    plugins:[{ id:'center', afterDraw(c){
+      const { ctx, chartArea } = c; if (!chartArea) return;
+      ctx.save();
+      const x = (chartArea.left + chartArea.right)/2, y = (chartArea.top + chartArea.bottom)/2;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = CV('--text'); ctx.font = '800 27px Inter';
+      ctx.fillText(pctOf(done, target) + '%', x, y - 2);
+      ctx.fillStyle = CV('--text-3'); ctx.font = '600 11px Inter';
+      ctx.fillText(done.toLocaleString() + ' / ' + target.toLocaleString(), x, y + 18);
+      ctx.restore();
+    }}] });
+}
+
+/** Done-vs-remaining rows, labelled with the fraction and the completion rate. */
+function progressBars(id, rows_, unit){
+  if (!rows_.length) return noData(id);
+  const r = rows_.slice().sort((a,b) => b.done - a.done);
+  fitHeight(id, r.length, 34, 66);
+  mk(id, { type:'bar',
+    data:{ labels:r.map(x => x.label), datasets:[
+      { label:'Finished', data:r.map(x=>x.done), backgroundColor:S(1), maxBarThickness:22, stack:'s',
+        borderRadius:{ topLeft:0, bottomLeft:0, topRight:4, bottomRight:4 } },
+      { label:'Remaining', data:r.map(x=>Math.max(x.target-x.done,0)), backgroundColor:MUTED(), borderRadius:4, maxBarThickness:22, stack:'s' } ]},
+    options: baseOpts({ indexAxis:'y',
+      layout:{ padding:{ top:2, right:118 } },
+      plugins:{ legend:{ position:'top', align:'end', labels:{ font:FONT, color:TXT(), boxWidth:12, padding:12 } },
+        datalabels:{ display: c => c.datasetIndex === 1, anchor:'end', align:'right', clamp:true, clip:false,
+          color:TXT(), font:{family:'Inter',size:11,weight:'700'},
+          formatter:(v,c) => { const x = r[c.dataIndex]; return x.done + ' / ' + x.target + '  ·  ' + pctOf(x.done, x.target) + '%'; } },
+        tooltip:{ callbacks:{ label: c => { const x = r[c.dataIndex];
+            return c.datasetIndex === 0 ? ' Finished: ' + x.done + ' ' + (unit||'')
+                                        : ' Remaining: ' + Math.max(x.target-x.done,0) + ' of ' + x.target; },
+          footer: its => pctOf(r[its[0].dataIndex].done, r[its[0].dataIndex].target) + '% complete' } } },
+      scales:{ x:{ stacked:true, beginAtZero:true, grace:'2%', ticks:{ font:{family:'Inter',size:11}, color:TXT() },
+                   grid:{color:GRID()}, border:{display:false} },
+        y:{ stacked:true, ticks:{ font:{family:'Inter',size:11.5,weight:'600'}, color:TXT(), autoSkip:false, maxRotation:0 },
+            grid:{display:false}, border:{display:false} } } }) },
+    r.map(x => ({ Group:x.label, Finished:x.done, Target:x.target, 'Completion %':pctOf(x.done,x.target) })));
+}
+
+function scatterChart(id, pts, xLabel, yLabel, refSlope){
+  if (!pts.length) return noData(id);
+  const sets = [{ label:'One respondent', data:pts, backgroundColor:C_WIFE(),
+                  pointRadius:7, pointHoverRadius:10, borderColor:CV('--surface'), borderWidth:2 }];
+  if (refSlope){
+    const xm = Math.max(...pts.map(p => p.x));
+    sets.push({ type:'line', label:'Sample average pay rate', data:[{x:0,y:0},{x:xm,y:xm*refSlope}],
+                borderColor:S(2), borderDash:[7,5], borderWidth:2, pointRadius:0, fill:false });
+  }
+  mk(id, { type:'scatter', data:{ datasets:sets },
+    options: baseOpts({
+      plugins:{ legend:{ position:'top', align:'end', labels:{ font:FONT, color:TXT(), boxWidth:13, padding:11 } },
+        datalabels:{ display:false },
+        tooltip:{ callbacks:{ title: () => '', label: c => c.raw.name
+          ? [' ' + c.raw.name, ' ' + xLabel + ': ' + c.raw.x, ' ' + yLabel + ': ' + fmtRs(c.raw.y)]
+          : ' ' + xLabel + ' ' + c.raw.x } } },
+      scales:{ x:{ beginAtZero:true, ticks:{ font:{family:'Inter',size:11}, color:TXT() }, grid:{color:GRID()}, border:{display:false},
+                   title:{ display:true, text:xLabel, font:{family:'Inter',size:11,weight:'600'}, color:TXT() } },
+        y:{ beginAtZero:true, ticks:{ font:{family:'Inter',size:11}, color:TXT(), callback: v => 'Rs ' + v.toLocaleString() },
+            grid:{color:GRID()}, border:{display:false},
+            title:{ display:true, text:yLabel, font:{family:'Inter',size:11,weight:'600'}, color:TXT() } } } }) },
+    pts.map(p => ({ Couple:p.name, [xLabel]:p.x, [yLabel]:p.y })));
+}
+
+// ============================================================================
+//  KPI / CALLOUT BUILDERS
+// ============================================================================
+function kpi(icon, value, label, delta, deltaClass, cardClass, small){
+  return `<div class="kpi-card ${cardClass||''}"><div class="kpi-icon">${icon}</div>
+    <div class="kpi-value${small?' sm':''}">${value}</div><div class="kpi-label">${label}</div>
+    ${delta ? `<div class="kpi-delta ${deltaClass||'navy'}">${delta}</div>` : ''}</div>`;
+}
+function callout(cls, icon, h, p){
+  return `<div class="callout ${cls}"><div class="callout-icon">${icon}</div>
+    <div class="callout-body"><h4>${h}</h4><p>${p}</p></div></div>`;
+}
+function box(cls, html){ return `<div class="insight-box ${cls}">${html}</div>`; }
+function set(id, html){ const e = document.getElementById(id); if (e) e.innerHTML = html; }
+function txt(id, v){ const e = document.getElementById(id); if (e) e.textContent = v; }
+
+/** Count KPI values up from zero once, on first paint. */
+function animateKpis(scope){
+  (scope || document).querySelectorAll('.kpi-value').forEach(el => {
+    const m = el.textContent.match(/^([\d,]+(?:\.\d+)?)(.*)$/);
+    if (!m) return;
+    const target = parseFloat(m[1].replace(/,/g,'')), rest = m[2];
+    if (isNaN(target) || target === 0) return;
+    const dec = (m[1].split('.')[1] || '').length;
+    const t0 = performance.now(), dur = 850;
+    (function tick(t){
+      const k = Math.min(((t || performance.now()) - t0) / dur, 1), eased = 1 - Math.pow(1-k, 3);
+      const v = target * eased;
+      el.textContent = (dec ? v.toFixed(dec) : Math.round(v).toLocaleString()) + rest;
+      if (k < 1) requestAnimationFrame(tick);
+    })(performance.now());
+  });
+}
+/** Fill every `data-q` slot with the verbatim question wording from the form. */
+function fillQuestions(){
+  document.querySelectorAll('[data-q]').forEach(el => {
+    const [form, v] = el.getAttribute('data-q').split(':');
+    const t = qtext(form, v);
+    el.textContent = t ? '“' + t + '”' : '';
+    if (!t) el.style.display = 'none';
+  });
+}
+</script>
