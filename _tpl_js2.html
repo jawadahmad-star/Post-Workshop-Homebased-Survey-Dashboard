@@ -46,9 +46,9 @@ function updateFilterCount(){
 }
 
 const PANEL_DRAW = {
-  overview:drawOverview, field:drawField,     tracker:drawTracker, work:drawWork,
-  jobs:drawJobs,         concerns:drawConcerns, mobility:drawMobility,
-  concord:drawConcord,   explorer:drawExplorer
+  overview:drawOverview, tracker:drawTracker,   work:drawWork, jobs:drawJobs,
+  concerns:drawConcerns, mobility:drawMobility, concord:drawConcord,
+  explorer:drawExplorer
 };
 const drawn = new Set();
 /* Chart.js measures its container at construction, and a panel still set to
@@ -125,6 +125,15 @@ function drawOverview(){
   const anyIds = new Set([...w.map(r => r.couple_id), ...h.map(r => r.couple_id)]);
   const partial = anyIds.size - cps.length;
 
+  const remaining = Math.max(target - cps.length, 0);
+  const perDay = m.field_days ? cps.length / m.field_days : 0;
+  const all = rows('all');
+  const durs = nums(all, 'duration_min');
+  const enums = [...new Set(all.map(r => r.enum_name).filter(Boolean))];
+  const rate = (rs, v) => shareOf(rs, v, ['Matches baseline']);
+  const verified = VERIFY.map(([v]) => rate(all, v)).filter(x => x != null);
+  const meanVerify = verified.length ? Math.round(mean(verified) * 10) / 10 : null;
+
   set('ov-kpis',
     kpi('👫', cps.length.toLocaleString(), 'Couples Fully Interviewed',
         pctOf(cps.length, target) + '% of the ' + target + '-couple frame', 'green', 'green') +
@@ -132,15 +141,13 @@ function drawOverview(){
         w.length + ' wife · ' + h.length + ' husband', 'navy', 'navy') +
     kpi('🎯', target.toLocaleString(), 'Couples in the Frame',
         (target * 2).toLocaleString() + ' interviews in total', 'navy', 'teal') +
-    kpi('📍', (FILT.area === 'all' ? m.areas_reached : 1) + ' / ' + areaProgress().length, 'Areas Reached',
-        'Neighbourhoods with a couple finished', 'navy', 'purple') +
     kpi('📅', m.field_days, 'Field Days So Far',
-        (m.first_date || '—') + ' → ' + (m.last_date || '—'), 'navy', 'amber') +
-    kpi('⏱️', fmt1(med(nums(rows('all'), 'duration_min'))), 'Median Interview (min)',
-        'Range ' + fmt1(m.min_duration) + '–' + fmt1(m.max_duration) + ' min', 'neutral', ''));
+        Math.round(perDay * 10)/10 + ' couples finished per day', 'up', 'amber') +
+    kpi('👥', enums.length, 'Active Enumerators',
+        '~' + (enums.length ? Math.round((w.length + h.length) / enums.length) : 0) + ' interviews each', 'navy', 'purple') +
+    kpi('⏱️', fmt1(med(durs)), 'Median Interview (min)',
+        durs.length ? 'Range ' + fmt1(Math.min(...durs)) + '–' + fmt1(Math.max(...durs)) : '—', 'neutral', ''));
 
-  const remaining = Math.max(target - cps.length, 0);
-  const perDay = m.field_days ? cps.length / m.field_days : 0;
   set('ov-callouts',
     callout('green','✅','Both spouses interviewed',
       cps.length + ' couple' + (cps.length===1?'':'s') + ' complete — ' + pctOf(cps.length, target) + '% of the frame.') +
@@ -152,6 +159,22 @@ function drawOverview(){
     callout('teal','🤝','Interview pairing',
       cps.length ? 'Every finished couple was interviewed by a female enumerator for the wife and a male enumerator for the husband, usually within minutes of each other.'
                  : 'No couple has both interviews yet under the current filter.'));
+
+  // Fieldwork health, kept to the headline the study team actually acts on.
+  set('ov-insights',
+    box('teal', `<strong>Pace:</strong> the team is finishing <strong>${Math.round(perDay*10)/10}</strong> couples per
+      field day across ${enums.length} enumerators. At that rate the remaining
+      <strong>${remaining.toLocaleString()}</strong> couples need roughly
+      <strong>${perDay ? Math.ceil(remaining/perDay).toLocaleString() : '—'}</strong> further field days.`) +
+    box(meanVerify === 100 ? 'green' : 'amber',
+      `<strong>Data quality:</strong> the five baseline identity checks — name, spouse's name, age, years married
+       and number of children — pass <strong>${meanVerify == null ? '—' : meanVerify + '%'}</strong> of the time
+       across the ${all.length} interviews in view. Enumerators rate
+       <strong>${shareOf(all,'comprehension',['Excellent','Very good']) || 0}%</strong> of respondents
+       “excellent” or “very good” on comprehension and
+       <strong>${shareOf(all,'cooperation',['Excellent','Very good']) || 0}%</strong> on cooperation, a third party
+       was present in <strong>${shareOf(all,'present_else',['Yes']) || 0}%</strong> of interviews, and a GPS fix was
+       captured in <strong>${pctOf(all.filter(r=>r.gps).length, all.length)}%</strong>.`));
 
   lineDaily('chartDaily', dailySeries());
   progressDonut('chartProgress', cps.length, target, 'couples');
@@ -191,6 +214,15 @@ function drawOverview(){
 
   progressBars('chartArea', areaProgress(), 'couples');
 
+  const eLabels = enums.slice().sort((a,b) =>
+    all.filter(r=>r.enum_name===b).length - all.filter(r=>r.enum_name===a).length);
+  stackedBar('chartEnums', eLabels, [
+    { name:'Wife interviews',    color:C_WIFE(), data:eLabels.map(e => w.filter(r=>r.enum_name===e).length) },
+    { name:'Husband interviews', color:C_HUSB(), data:eLabels.map(e => h.filter(r=>r.enum_name===e).length) }
+  ], { horizontal:true, per:40 });
+  roleBar('chartCompreh', byRole('comprehension','wife'));
+  roleBar('chartCoop',    byRole('cooperation','wife'));
+
   set('ov-foot', `Tracking frame: ${DB.roster.length} couples on the original roster, of which
     <strong>${m.roster_eligible}</strong> were successfully surveyed at endline and form the in-scope frame for this
     round; ${m.roster_not_surveyed} could not be surveyed (refusal, relocation or replacement) and are excluded.
@@ -199,9 +231,8 @@ function drawOverview(){
 }
 
 // ============================================================================
-//  02 · FIELDWORK & DATA QUALITY
-//  Operations and quality were two thin tabs; the questions they answer —
-//  "is the work getting done" and "can it be trusted" — are read together.
+//  Baseline verification checks — every interview re-asks these five against
+//  the baseline record, and a mismatch means the team may have the wrong person.
 // ============================================================================
 const VERIFY = [
   ['match_name',  "Respondent's own name"],
@@ -211,69 +242,6 @@ const VERIFY = [
   ['match_child', 'Number of children']
 ];
 
-function drawField(){
-  const m = DB.meta, all = rows('all'), w = rows('Wife'), h = rows('Husband');
-  const cps = couples(), days = dailySeries();
-  const perDay = days.length ? cps.length / days.length : 0;
-  const remaining = Math.max(m.target_couples - cps.length, 0);
-  const enums = [...new Set(all.map(r => r.enum_name).filter(Boolean))];
-  const durs = nums(all, 'duration_min');
-  const rate = (rs, v) => shareOf(rs, v, ['Matches baseline']);
-  const verified = VERIFY.map(([v]) => rate(all, v)).filter(x => x != null);
-  const meanVerify = verified.length ? Math.round(mean(verified) * 10) / 10 : null;
-  const thirdParty = shareOf(all, 'present_else', ['Yes']);
-
-  set('fq-kpis',
-    kpi('⚡', Math.round(perDay * 10)/10, 'Couples per Field Day',
-        days.length + ' field day' + (days.length===1?'':'s') + ' so far', 'up', 'green') +
-    kpi('👥', enums.length, 'Active Enumerators',
-        '~' + (enums.length ? Math.round(all.length / enums.length) : 0) + ' interviews each', 'navy', 'teal') +
-    kpi('⏱️', fmt1(med(durs)), 'Median Duration (min)',
-        durs.length ? 'Range ' + fmt1(Math.min(...durs)) + '–' + fmt1(Math.max(...durs)) : '—', 'neutral', 'amber') +
-    kpi('🪪', meanVerify == null ? '—' : meanVerify + '%', 'Baseline Checks Passed',
-        'Mean across all five checks', meanVerify === 100 ? 'up' : 'neutral',
-        meanVerify === 100 ? 'green' : 'amber') +
-    kpi('📍', pctOf(all.filter(r=>r.gps).length, all.length) + '%', 'GPS Fix Captured',
-        all.filter(r=>r.gps).length + ' of ' + all.length + ' interviews', 'navy', 'navy') +
-    kpi('👤', thirdParty == null ? '—' : thirdParty + '%', 'Third Party Present',
-        'Someone else in the room during the interview', 'neutral', 'purple'));
-
-  set('fq-insights',
-    box('teal', `<strong>Pace:</strong> the team is finishing <strong>${Math.round(perDay*10)/10}</strong> couples per
-      field day. At that rate the remaining <strong>${remaining.toLocaleString()}</strong> couples need roughly
-      <strong>${perDay ? Math.ceil(remaining/perDay).toLocaleString() : '—'}</strong> further field days.`) +
-    (meanVerify === 100
-      ? box('green', `<strong>Respondent identity is clean:</strong> all five baseline checks — name, spouse's name,
-          age, years married and number of children — matched for every one of the ${all.length} interviews in view,
-          and the median interview runs ${fmt1(med(durs))} minutes with a tight spread. The team is sitting with the
-          right people and not rushing them.`)
-      : box('amber', `<strong>Verification gaps:</strong> the five baseline checks pass on average
-          <strong>${meanVerify}%</strong> of the time. The chart below shows which check is failing and in which
-          round — resolve these before the affected interviews are used in analysis.`)));
-
-  cumulativeChart('chartCumulative', days, m.target_couples);
-
-  const eLabels = enums.slice().sort((a,b) =>
-    all.filter(r=>r.enum_name===b).length - all.filter(r=>r.enum_name===a).length);
-  stackedBar('chartEnums', eLabels, [
-    { name:'Wife interviews',    color:C_WIFE(), data:eLabels.map(e => w.filter(r=>r.enum_name===e).length) },
-    { name:'Husband interviews', color:C_HUSB(), data:eLabels.map(e => h.filter(r=>r.enum_name===e).length) }
-  ], { horizontal:true, per:40 });
-
-  distBar('chartDuration', band(all, 'duration_min', 5, ' min'), S(4), false);
-
-  stackedBar('chartVerify', VERIFY.map(x => x[1]), [
-    { name:'Wife round — matched',    color:C_WIFE(), data:VERIFY.map(([v]) => rate(w, v) || 0) },
-    { name:'Husband round — matched', color:C_HUSB(), data:VERIFY.map(([v]) => rate(h, v) || 0) }
-  ], { suffix:'%', minLabel:0 });
-  // Two independent rates read better side by side than stacked.
-  const vc = Chart.getChart(document.getElementById('chartVerify'));
-  if (vc){ vc.options.scales.x.stacked = false; vc.options.scales.y.stacked = false;
-           vc.options.scales.y.max = 100; vc.data.datasets.forEach(d => d.stack = undefined); vc.update(); }
-
-  roleBar('chartCompreh', byRole('comprehension','wife'));
-  roleBar('chartCoop',    byRole('cooperation','wife'));
-}
 // ============================================================================
 //  03 · COUPLE TRACKER
 // ============================================================================
@@ -676,6 +644,7 @@ function drawMobility(){
 // ============================================================================
 const CONCORD = [
   ['w_participate',       'Did the wife attend the May workshop?',                'Workshop'],
+  ['reason_noattend',     'Why she did not participate',                          'Workshop'],
   ['wish_attend',         'Does she wish she had attended?',                      'Workshop'],
   ['contact_post',        'Was she contacted by an employer or NGO afterwards?',  'Workshop'],
   ['w_accompany',         'Who did she go to the workshop with?',                 'Workshop'],

@@ -74,6 +74,59 @@ DROP_ALWAYS = {
     "easyload_card_photo", "formdef_version", "enum_other", "list_contacted_empl_count",
 }
 
+# --------------------------------------------------------------------------------------
+#  PERSPECTIVE-NEUTRAL ANSWER LABELS
+#
+#  The two questionnaires are parallel forms, so a given code means the same thing
+#  in both — but several lists word the option from the respondent's point of view.
+#  On "who first raised the idea", code 1 reads "I did" to the wife and "Wife" to
+#  the husband: the same answer, spelled two ways.
+#
+#  Comparing the printed labels therefore scored a couple who agreed perfectly as
+#  disagreeing, and split one category into two bars on the wife/husband charts.
+#  Re-labelling both forms from the code fixes the charts and the agreement scores
+#  at once. Keyed by the XLSForm list name; lists whose wording already matches are
+#  left alone.
+# --------------------------------------------------------------------------------------
+
+NEUTRAL_CHOICES = {
+    "discuss_who": {
+        1: "The wife", 2: "The husband", 3: "Parents or parents-in-law",
+        4: "Other relatives", 99: "Someone else",
+    },
+    "notattend": {
+        1: "She was not interested",
+        2: "She was interested but could not go for family reasons",
+        3: "The husband did not approve",
+        4: "The family did not approve",
+        5: "No family member could accompany her",
+        6: "Does not remember",
+        7: "She was not invited",
+        99: "Other",
+    },
+    "job_offer": {
+        1: "Yes, but she could not accept",
+        2: "Yes, she accepted but never started",
+        3: "Yes, she accepted and is working",
+        4: "No",
+        98: "Doesn't know",
+    },
+    "trip_company": {
+        1: "Alone", 2: "With her husband", 3: "With another male family member",
+        4: "With a female family member", 5: "With friends/coworkers",
+        6: "With friends/others", 99: "Other",
+    },
+}
+
+
+def apply_neutral_labels(choices: dict) -> None:
+    """Rewrite a form's choice lists in place with the shared wording."""
+    for listname, mapping in NEUTRAL_CHOICES.items():
+        for item in choices.get(listname, []):
+            if item["v"] in mapping:
+                item["label"] = mapping[item["v"]]
+
+
 # Multi-select variables: dummy-column prefix -> (choice list name in the XLSForm)
 MULTISELECT = {
     "work_improvement":  "improved_work",
@@ -273,9 +326,12 @@ def build_records(df: pd.DataFrame, vlabels: dict, questions: dict, choices: dic
     def label_for(var, code):
         if code is None:
             return None
+        ln = questions.get(var, {}).get("list", "")
+        # Shared wording wins over the form's own, so both rounds agree.
+        if ln in NEUTRAL_CHOICES and code in NEUTRAL_CHOICES[ln]:
+            return NEUTRAL_CHOICES[ln][code]
         if var in vlabels and code in vlabels[var]:
             return vlabels[var][code]
-        ln = questions.get(var, {}).get("list", "")
         for item in choices.get(ln, []):
             if item["v"] == code:
                 return item["label"]
@@ -310,7 +366,9 @@ def build_records(df: pd.DataFrame, vlabels: dict, questions: dict, choices: dic
         dur = to_num(row.get("duration"))
         if dur is None and not pd.isna(start) and not pd.isna(end):
             dur = int((end - start).total_seconds())
-        rec["duration_min"] = None if dur is None else round(dur / 60.0, 1)
+        # Kept to two decimals: rounding each record to one first, then taking
+        # a median across records, shifts the headline figure by a tenth.
+        rec["duration_min"] = None if dur is None else round(dur / 60.0, 2)
 
         # Lag between finishing the interview and the form reaching the server —
         # a standard field-management signal.
@@ -552,6 +610,9 @@ def main() -> int:
     log("reading form definitions …")
     q_wife, ch_wife = read_form(p("wife_form"))
     q_husb, ch_husb = read_form(p("husb_form"))
+    apply_neutral_labels(ch_wife)
+    apply_neutral_labels(ch_husb)
+    log(f"neutral wording applied to {len(NEUTRAL_CHOICES)} perspective-dependent lists")
 
     log("reading roster …")
     roster, roster_by_couple = read_roster(p("roster"))

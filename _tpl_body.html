@@ -58,7 +58,6 @@
   <div class="stickybar-nav">
     <nav class="nav-tabs" id="navTabs">
       <button class="nav-tab active" onclick="showPanel('overview',this)">📊 Overview</button>
-      <button class="nav-tab" onclick="showPanel('field',this)">🛠️ Fieldwork &amp; Quality</button>
       <button class="nav-tab" onclick="showPanel('tracker',this)">👫 Couple Tracker</button>
       <button class="nav-tab" onclick="showPanel('work',this)">🧵 Work, Earnings &amp; Time</button>
       <button class="nav-tab" onclick="showPanel('jobs',this)">🎓 Workshop &amp; Jobs</button>
@@ -106,11 +105,12 @@
       <div>
         <div class="eyebrow">Section 01</div>
         <h2>Survey at a Glance</h2>
-        <p>The study interviews <strong>both spouses of the same couple separately</strong>, so a couple only counts as finished once the wife <em>and</em> the husband have each completed an interview. Everything below is measured against the <span id="fx-frame1">—</span>-couple tracking frame carried forward from the endline round.</p>
+        <p>The study interviews <strong>both spouses of the same couple separately</strong>, so a couple only counts as finished once the wife <em>and</em> the husband have each completed an interview. Everything below is measured against the <span id="fx-frame1">—</span>-couple tracking frame carried forward from the endline round, alongside the fieldwork signals that say whether the work is on pace and can be trusted.</p>
       </div>
     </div>
     <div class="kpi-grid" id="ov-kpis"></div>
     <div class="callout-row" id="ov-callouts"></div>
+    <div id="ov-insights"></div>
     <div class="chart-grid cols-2">
       <div class="chart-card full">
         <h3>Interviews Completed per Field Day</h3>
@@ -142,41 +142,11 @@
         <div class="chart-wrap auto"><canvas id="chartArea"></canvas></div>
       </div>
     </div>
-    <p class="footnote" id="ov-foot">—</p>
-  </div>
-
-  <!-- ---------- 02 · FIELDWORK & QUALITY ---------- -->
-  <div class="panel" id="panel-field">
-    <div class="section-header">
-      <div class="section-header-accent"></div>
-      <div>
-        <div class="eyebrow">Section 02</div>
-        <h2>Fieldwork &amp; Data Quality</h2>
-        <p>The operational headline — pace against the frame, output across the team, and whether the interviews can be trusted. Every interview re-verifies the respondent against the baseline record on five checks (name, spouse's name, age, years married, children); a mismatch means the team may be sitting with the wrong person, so those five are the first thing to read.</p>
-      </div>
-    </div>
-    <div class="kpi-grid" id="fq-kpis"></div>
-    <div id="fq-insights"></div>
-    <div class="chart-grid cols-2">
-      <div class="chart-card full">
-        <h3>Cumulative Couples Completed vs Frame</h3>
-        <div class="chart-desc">Running total of couples with both interviews done, against the full tracking frame</div>
-        <div class="chart-wrap tall"><canvas id="chartCumulative"></canvas></div>
-      </div>
+    <div class="chart-grid cols-3">
       <div class="chart-card">
         <h3>Output by Enumerator</h3>
         <div class="chart-desc">Interviews completed per field staff member, by the round they run</div>
         <div class="chart-wrap auto"><canvas id="chartEnums"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Interview Length</h3>
-        <div class="chart-desc">Minutes from opening the form to submission, banded</div>
-        <div class="chart-wrap"><canvas id="chartDuration"></canvas></div>
-      </div>
-      <div class="chart-card full">
-        <h3>Baseline Verification — All Five Checks</h3>
-        <div class="chart-desc">Share of interviews where the respondent's answer matched the baseline record, per check and per round</div>
-        <div class="chart-wrap"><canvas id="chartVerify"></canvas></div>
       </div>
       <div class="chart-card">
         <h3>Comprehension Level</h3>
@@ -189,14 +159,15 @@
         <div class="chart-wrap"><canvas id="chartCoop"></canvas></div>
       </div>
     </div>
+    <p class="footnote" id="ov-foot">—</p>
   </div>
 
-  <!-- ---------- 03 · COUPLE TRACKER ---------- -->
+  <!-- ---------- 02 · COUPLE TRACKER ---------- -->
   <div class="panel" id="panel-tracker">
     <div class="section-header">
       <div class="section-header-accent"></div>
       <div>
-        <div class="eyebrow">Section 03</div>
+        <div class="eyebrow">Section 02</div>
         <h2>Couple Tracker</h2>
         <p>The full tracking frame, one row per couple, showing whether the wife interview and the husband interview are each done. Search by name, couple ID or area; sort any column; export exactly what you are looking at for the field team.</p>
       </div>
@@ -237,12 +208,12 @@
     <p class="footnote">Couples marked <em>dropped at endline</em> could not be surveyed in the previous round (refusal, relocation or a household that had to be replaced) and are excluded from the in-scope frame by default.</p>
   </div>
 
-  <!-- ---------- 04 · WORK, EARNINGS & TIME ---------- -->
+  <!-- ---------- 03 · WORK, EARNINGS & TIME ---------- -->
   <div class="panel" id="panel-work">
     <div class="section-header">
       <div class="section-header-accent"></div>
       <div>
-        <div class="eyebrow">Section 04</div>
+        <div class="eyebrow">Section 03</div>
         <h2>Work, Earnings &amp; the Time Budget</h2>
         <p>What the wife's home-based garment work actually pays, and what the whole working day costs her once unpaid chores and care are counted. Each spouse also reports the hours they think their <em>spouse</em> spends, which gives two independent estimates of the same quantity.</p>
       </div>
@@ -291,12 +262,12 @@
     </div>
   </div>
 
-  <!-- ---------- 05 · WORKSHOP & JOBS ---------- -->
+  <!-- ---------- 04 · WORKSHOP & JOBS ---------- -->
   <div class="panel" id="panel-jobs">
     <div class="section-header">
       <div class="section-header-accent"></div>
       <div>
-        <div class="eyebrow">Section 05</div>
+        <div class="eyebrow">Section 04</div>
         <h2>The May Workshop &amp; the Route to a Job</h2>
         <p>Every wife in the frame was invited in May to a workshop on job opportunities for women outside the home. This is the causal chain the study exists to measure: who attended, whether any employer followed up, and how far anyone has actually got towards paid work outside the home. Both spouses are asked the job-search questions independently.</p>
       </div>
@@ -352,12 +323,12 @@
     </div>
   </div>
 
-  <!-- ---------- 06 · DISCUSSION & CONCERNS ---------- -->
+  <!-- ---------- 05 · DISCUSSION & CONCERNS ---------- -->
   <div class="panel" id="panel-concerns">
     <div class="section-header">
       <div class="section-header-accent"></div>
       <div>
-        <div class="eyebrow">Section 06</div>
+        <div class="eyebrow">Section 05</div>
         <h2>Household Discussion &amp; Concerns</h2>
         <p>Whether the couple has actually talked about the wife working outside the home since May, who raised it, how the other spouse reacted, and what each side says the objections are. Because both spouses answer the same concern questions about themselves <em>and</em> about each other, four separate perspectives sit on the same scale.</p>
       </div>
@@ -414,12 +385,12 @@
     </div>
   </div>
 
-  <!-- ---------- 07 · MOBILITY & DECISIONS ---------- -->
+  <!-- ---------- 06 · MOBILITY & DECISIONS ---------- -->
   <div class="panel" id="panel-mobility">
     <div class="section-header">
       <div class="section-header-accent"></div>
       <div>
-        <div class="eyebrow">Section 07</div>
+        <div class="eyebrow">Section 06</div>
         <h2>Mobility, Decisions &amp; Independent Access</h2>
         <p>How freely the wife moves outside the home, who she goes with, who decides, and whether she independently controls a bank account or a phone. These questions are put to both spouses about the <em>same</em> woman, so each pair of bars is a direct test of whether the household agrees.</p>
       </div>
@@ -474,12 +445,12 @@
     </div>
   </div>
 
-  <!-- ---------- 08 · SPOUSAL AGREEMENT ---------- -->
+  <!-- ---------- 07 · SPOUSAL AGREEMENT ---------- -->
   <div class="panel" id="panel-concord">
     <div class="section-header">
       <div class="section-header-accent"></div>
       <div>
-        <div class="eyebrow">Section 08 · Flagship analysis</div>
+        <div class="eyebrow">Section 07 · Flagship analysis</div>
         <h2>Do the Two Spouses Tell the Same Story?</h2>
         <p>Around thirty questions are put to the wife and to the husband separately, about the same facts — did she attend the workshop, how often does she leave the house, who decides. Interviewing both halves of the couple is what makes this possible, and it is the strongest internal validity check the study has. Every row below is one question, scored across the <span id="fx-nboth">—</span> couples where both interviews are in.</p>
       </div>
@@ -521,15 +492,15 @@
         <th>Most common disagreement</th>
       </tr></thead>
       <tbody id="cc-body"></tbody></table></div></div>
-    <p class="footnote">Agreement is exact-match on the labelled answer. Couples where either spouse was not asked the question (because a filter question routed past it) are excluded from that row's denominator, so the couple count varies by question.</p>
+    <p class="footnote">Agreement is exact-match on the answer, compared on the underlying answer code rather than the printed wording. Several questions are worded from the respondent's own point of view — on <em>who first raised the idea</em>, the same answer reads “I did” to the wife and “Wife” to the husband — so those options are re-labelled to one shared wording before scoring. A couple who agree are never counted as disagreeing merely because the questionnaire phrased their answer differently. Couples where either spouse was not asked the question (because a filter question routed past it) are excluded from that row's denominator, so the couple count varies by question.</p>
   </div>
 
-  <!-- ---------- 09 · DATA EXPLORER ---------- -->
+  <!-- ---------- 08 · DATA EXPLORER ---------- -->
   <div class="panel" id="panel-explorer">
     <div class="section-header">
       <div class="section-header-accent"></div>
       <div>
-        <div class="eyebrow">Section 09</div>
+        <div class="eyebrow">Section 08</div>
         <h2>Data Explorer</h2>
         <p>Every variable in both questionnaires — including the questions that did not earn a chart of their own. Pick any question to chart it instantly with its exact wording and answer options, browse the interview-level records, or export the whole dataset.</p>
       </div>
