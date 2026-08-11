@@ -46,6 +46,14 @@
         <button class="hbtn" onclick="window.print()" title="Print or save the dashboard as PDF">🖨️ Print</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Only the tabs and the filters are pinned. The masthead scrolls away with
+     the page, so the sticky element keeps one fixed height — nothing resizes
+     mid-scroll, so there is no reflow and no jump. -->
+<div class="stickybar" id="stickyBar">
+  <div class="stickybar-nav">
     <nav class="nav-tabs" id="navTabs">
       <button class="nav-tab active" onclick="showPanel('overview',this)">📊 Overview</button>
       <button class="nav-tab" onclick="showPanel('field',this)">🛠️ Fieldwork &amp; Quality</button>
@@ -59,9 +67,8 @@
     </nav>
   </div>
 
-  <!-- The filter bar rides inside the sticky header rather than pinning itself
-       at a computed offset: two independently-sticky bars left a gap that page
-       content scrolled through whenever the masthead changed height. -->
+  <!-- Inside the same sticky element as the tabs, so the two can never drift
+       apart and let page content show through between them. -->
   <div class="filterbar">
     <div class="filterbar-inner">
     <span class="fb-label">Filter</span>

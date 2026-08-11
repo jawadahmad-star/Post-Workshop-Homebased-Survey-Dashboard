@@ -66,22 +66,19 @@
            transition:background .25s ease, color .25s ease; -webkit-font-smoothing:antialiased; }
 
     /* ===================== HEADER ===================== */
-    .header { background:var(--rs-navy-dark); color:white; position:sticky; top:0; z-index:100; box-shadow:0 4px 24px rgba(0,0,0,.35); border-bottom:3px solid var(--rs-red); }
+    /* The masthead is NOT sticky. An earlier build pinned it and shrank it on
+       scroll; changing a sticky element's height mid-scroll reflows the whole
+       document on every frame and jumps the content under the reader. Only the
+       tabs and filters are pinned now, at one constant height. */
+    .header { background:var(--rs-navy-dark); color:white; }
     .header-inner { max-width:1560px; margin:0 auto; padding:0 32px; display:flex; flex-direction:column; }
-    .header-top { display:flex; justify-content:space-between; align-items:center; gap:20px; padding:14px 0 12px; border-bottom:1px solid rgba(255,255,255,.08);
-                  transition:padding .18s ease, opacity .18s ease; }
-    .header-logo-wrap img { height:44px; display:block; transition:height .18s ease; }
+    .header-top { display:flex; justify-content:space-between; align-items:center; gap:20px; padding:14px 0 12px; }
+    .header-logo-wrap img { height:44px; display:block; }
 
-    /* On a short laptop screen the masthead plus the filter bar were eating
-       half the viewport, leaving almost nothing for the data. Once the reader
-       scrolls, the masthead collapses to a slim strip and only the tabs and
-       filters stay pinned. */
-    .header.compact .header-top { padding:6px 0; border-bottom:none; }
-    .header.compact .header-logo-wrap img { height:26px; }
-    .header.compact .header-study-sub,
-    .header.compact .header-meta { display:none; }
-    .header.compact .header-study-title { font-size:15px; }
-    .header.compact .nav-tabs { padding:2px 0 7px; }
+    .stickybar { position:sticky; top:0; z-index:100; border-bottom:3px solid var(--rs-red);
+                 box-shadow:0 4px 20px rgba(0,0,0,.28); }
+    .stickybar-nav { background:var(--rs-navy-dark); }
+    .stickybar-nav .nav-tabs { max-width:1560px; margin:0 auto; padding:7px 32px; }
     .header-study { text-align:center; flex:1; padding:0 16px; }
     .header-study-title { font-family:'Playfair Display',serif; font-size:22px; font-weight:700; color:#fff; letter-spacing:-.2px; display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; }
     .live-chip { font-family:'Inter',sans-serif; font-size:9.5px; font-weight:800; letter-spacing:1px; text-transform:uppercase; background:var(--green-600); color:#fff; padding:3px 9px; border-radius:5px; display:inline-flex; align-items:center; gap:5px; }
@@ -97,7 +94,7 @@
     /* Thirteen sections will not fit on one row of a laptop screen, and a
        horizontally-scrolling strip hides the last tabs with no visible cue —
        so the strip wraps and every section stays reachable at a glance. */
-    .nav-tabs { display:flex; flex-wrap:wrap; gap:4px; padding:4px 0 10px; }
+    .nav-tabs { display:flex; flex-wrap:wrap; gap:4px; }
     .nav-tab { padding:8px 12px; font-size:12px; font-weight:500; color:rgba(255,255,255,.62); cursor:pointer;
                border-radius:8px; border:none; background:rgba(255,255,255,.05); white-space:nowrap;
                transition:background .2s,color .2s; letter-spacing:.2px; font-family:'Inter',sans-serif; }
@@ -291,6 +288,7 @@
     @media (max-height:820px) {
       .header-top { padding:9px 0 8px; }
       .header-logo-wrap img { height:34px; }
+      .stickybar-nav .nav-tabs { padding:5px 32px; }
       .live-banner { padding:7px 32px; font-size:11.5px; }
       .filterbar-inner { padding:8px 32px; }
       .main { padding:18px 32px 48px; }
@@ -311,9 +309,9 @@
     @media (max-width:720px) {
       /* Pinning the masthead on a phone leaves no usable height at all, so the
          whole header scrolls away and only the filter bar is worth keeping. */
-      /* A pinned masthead leaves no usable height on a phone, so the whole
-         header — filters included — scrolls away with the page. */
-      .header { position:static; }
+      /* A phone has no height to spare, so nothing is pinned at all —
+         the tabs and filters scroll away with the page. */
+      .stickybar { position:static; }
       .header-top { gap:10px; padding:10px 0 8px; }
       .header-logo-wrap img { height:30px; }
       .header-study { flex:1 1 100%; order:3; text-align:left; padding:0; }
@@ -321,7 +319,7 @@
       .header-study-sub { font-size:9.5px; letter-spacing:.4px; }
       .header-meta { font-size:11px; line-height:1.5; }
       .header-meta strong { font-size:11.5px; }
-      .nav-tabs { padding:2px 0 8px; gap:3px; }
+      .stickybar-nav .nav-tabs { padding:6px 12px; gap:3px; }
       .nav-tab { padding:7px 9px; font-size:11px; }
 
       .live-banner { padding:8px 14px; font-size:11px; gap:7px; }
@@ -378,7 +376,7 @@
       .prog-grid { grid-template-columns:1fr; }
     }
     @media print {
-      .header, .live-banner, .filterbar, .card-tools, .tbl-toolbar { display:none !important; }
+      .header, .live-banner, .stickybar, .card-tools, .tbl-toolbar { display:none !important; }
       .panel { display:block !important; page-break-before:always; }
       body { background:#fff; }
       .chart-card, .kpi-card { box-shadow:none; border:1px solid #e2e8f0; }

@@ -88,8 +88,6 @@ function renderAll(){
   updateFilterCount();
   drawPanel('overview');
   animateKpis();
-  syncHeaderHeight();
-  initStickyHeader();
 }
 
 // ============================================================================
@@ -118,9 +116,6 @@ function areaProgress(){
 }
 const roleColors = () => [C_WIFE(), C_HUSB()];
 
-// ============================================================================
-//  01 · OVERVIEW
-// ============================================================================
 // ============================================================================
 //  01 · OVERVIEW
 // ============================================================================
@@ -955,7 +950,6 @@ let __rz;
 window.addEventListener('resize', () => {
   clearTimeout(__rz);
   __rz = setTimeout(() => {
-    syncHeaderHeight();
     if (!DB) return;
     const active = document.querySelector('.panel.active');
     if (!active) return;
