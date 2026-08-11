@@ -250,8 +250,15 @@
     @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(74,222,128,.6);} 70%{box-shadow:0 0 0 8px rgba(74,222,128,0);} 100%{box-shadow:0 0 0 0 rgba(74,222,128,0);} }
 
     /* ===================== PASSWORD GATE ===================== */
-    #auth-gate { position:fixed; inset:0; z-index:9999; background:radial-gradient(1200px 600px at 50% -10%, #39415f 0%, #1E2438 55%, #141827 100%); display:flex; align-items:center; justify-content:center; flex-direction:column; padding:24px; }
-    .auth-card { background:#fff; border-radius:20px; padding:42px 40px; width:100%; max-width:440px; box-shadow:0 24px 80px rgba(0,0,0,.45); text-align:center; }
+    /* The gate scrolls, and the centring lives on an inner wrapper with
+       min-height:100%. Centring directly on a fixed, overflowing flex container
+       clips the top of the card beyond reach on a short screen. */
+    #auth-gate { position:fixed; inset:0; z-index:9999; overflow-y:auto; -webkit-overflow-scrolling:touch;
+                 background:radial-gradient(1200px 600px at 50% -10%, #39415f 0%, #1E2438 55%, #141827 100%); }
+    .auth-inner { min-height:100%; display:flex; align-items:center; justify-content:center;
+                  flex-direction:column; padding:24px 16px; }
+    .auth-card { background:#fff; border-radius:20px; padding:42px 40px; width:100%; max-width:440px;
+                 box-shadow:0 24px 80px rgba(0,0,0,.45); text-align:center; flex-shrink:0; }
     .auth-logo { width:54px; height:54px; background:var(--rs-red); border-radius:15px; display:flex; align-items:center; justify-content:center; font-size:25px; margin:0 auto 18px; box-shadow:0 8px 20px rgba(232,25,44,.3); }
     .auth-title { font-family:'Playfair Display',serif; font-size:22px; font-weight:700; color:#2D3450; margin-bottom:6px; line-height:1.35; }
     .auth-tag { display:inline-block; font-size:9.5px; font-weight:800; letter-spacing:1px; text-transform:uppercase; background:#DCFCE7; color:#14532d; padding:4px 10px; border-radius:5px; margin-bottom:14px; }
@@ -268,6 +275,32 @@
     .auth-note { margin-top:18px; font-size:11px; color:#94a3b8; line-height:1.6; border-top:1px solid #e2e8f0; padding-top:14px; }
     .auth-footer { margin-top:22px; font-size:11.5px; color:rgba(255,255,255,.4); letter-spacing:.3px; text-align:center; }
     .auth-footer strong { color:rgba(255,255,255,.65); }
+
+    /* Short viewports — a laptop at 600px or a phone in landscape — need the
+       card to fit rather than rely on scrolling. */
+    @media (max-height:720px) {
+      .auth-inner { padding:16px 14px; }
+      .auth-card { padding:24px 26px; border-radius:16px; }
+      .auth-logo { width:42px; height:42px; font-size:20px; border-radius:12px; margin-bottom:12px; }
+      .auth-title { font-size:18px; }
+      .auth-tag { margin-bottom:10px; }
+      .auth-subtitle { font-size:12px; margin-bottom:16px; line-height:1.5; }
+      .auth-input { padding:11px 14px; font-size:14px; }
+      .auth-btn { margin-top:13px; padding:12px; font-size:14px; }
+      .auth-error { min-height:0; margin-top:9px; font-size:12px; }
+      .auth-note { margin-top:13px; padding-top:11px; font-size:10.5px; line-height:1.5; }
+      .auth-footer { margin-top:14px; font-size:10.5px; }
+    }
+    @media (max-height:560px) {
+      /* Last resort: drop the reassurance copy so the input stays reachable. */
+      .auth-note, .auth-subtitle { display:none; }
+      .auth-card { padding:20px 22px; }
+    }
+    @media (max-width:480px) {
+      .auth-card { padding:28px 22px; border-radius:16px; }
+      .auth-title { font-size:19px; }
+      .auth-subtitle { font-size:12.5px; }
+    }
 
     /* ===================== RESPONSIVE ===================== */
     /* Short viewports: trim the vertical furniture so the charts get the room. */
