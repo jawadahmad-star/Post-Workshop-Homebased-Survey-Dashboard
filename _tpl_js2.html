@@ -164,9 +164,22 @@ function drawOverview(){
   state.n = target;
   donutChart('chartCoupleState', state, [S(6), S(4), MUTED()]);
 
+  /* The roster's endline_status is free text a field officer typed, so the
+     values are long sentences. Bucket them into the handful of outcomes that
+     actually matter; anything unrecognised keeps its own wording. */
+  const outcome = s => {
+    const t = String(s || '').toLowerCase();
+    if (!t) return 'Could not be surveyed';
+    if (t.includes('refus')) return 'Refused';
+    if (t.includes('shift')) return 'Moved away';
+    if (t.includes('replac') || t.includes('incorrect')) return 'Replaced household';
+    if (t.includes('died')) return 'Bereavement';
+    if (t.includes('lock')) return 'Locked / not found';
+    return s;
+  };
   const endline = new Map();
   DB.roster.forEach(r => {
-    const k = r.eligible ? 'Surveyed at endline — in scope' : (r.endline_status || 'Could not be surveyed');
+    const k = r.eligible ? 'Surveyed at endline' : outcome(r.endline_status);
     endline.set(k, (endline.get(k) || 0) + 1);
   });
   const eArr = [...endline.entries()].map(([label, value]) => ({ label, value })).sort((a,b) => b.value - a.value);

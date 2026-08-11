@@ -437,14 +437,25 @@ function distBar(id, arr, color, horizontal, msg){
 
 function donutChart(id, arr, colors, msg){
   if (empty(arr)) return noData(id, msg);
+  const el = document.getElementById(id);
+  const w = (el && el.clientWidth) || 320;
+  /* Measure what actually gets rendered — the label plus the count appended to
+     it — not the bare label. A legend down the right-hand side only works while
+     that text is short; anything longer runs off the canvas, so those charts
+     get a legend underneath instead, which wraps. */
+  const longest = Math.max(...arr.map(x => String(x.label).length + String(x.value).length + 4));
+  const side = longest <= 24 && arr.length <= 6 && w > 330;
+  const cap = side ? 24 : 46;
+  const clip = s => (s.length > cap ? s.slice(0, cap - 1).replace(/[\s,–—-]+$/, '') + '…' : s);
   mk(id, { type:'doughnut',
     data:{ labels:L(arr), datasets:[{ data:V(arr), backgroundColor: colors || PALETTE(),
            borderWidth:2, borderColor: CV('--surface') || '#fff' }] },
     options: baseOpts({ cutout:'58%',
-      plugins:{ legend:{ position:'right', labels:{ font:FONT, color:TXT(), boxWidth:12, padding:9,
+      plugins:{ legend:{ position: side ? 'right' : 'bottom',
+                labels:{ font:FONT, color:TXT(), boxWidth:12, padding:9,
                   generateLabels: ch => Chart.overrides.doughnut.plugins.legend.labels.generateLabels(ch)
                     .map(l => { const v = ch.data.datasets[0].data[l.index];
-                                l.text = wrapTick(l.text, 26).join(' ') + '  (' + v + ')'; return l; }) } },
+                                l.text = clip(String(l.text)) + '  (' + v + ')'; return l; }) } },
         tooltip:{ callbacks:{ label: c => { const t = c.dataset.data.reduce((a,b)=>a+b,0) || 1;
                   return ' ' + c.raw + ' of ' + t + '  (' + Math.round(100*c.raw/t) + '%)'; } } },
         datalabels:{ display:true, color:'#fff', font:{family:'Inter',size:12,weight:'700'},
@@ -519,11 +530,13 @@ function stackedBar(id, labels, series, opts){
                      color:'#fff', font:{family:'Inter',size:10.5,weight:'700'},
                      formatter: v => Math.round(v*10)/10 + sfx } },
       scales:{
+        // Whichever axis carries the values also carries the unit — an axis
+        // reading 0…100 next to bars labelled "84.6%" is ambiguous.
         x:{ stacked:true, beginAtZero:true, ticks:{ font:{family:'Inter',size:11}, color:TXT(), autoSkip:false, maxRotation:0,
-              callback: horizontal ? undefined : function(v){ return wrapTick(this.getLabelForValue(v), 16); } },
+              callback: horizontal ? (v => v + sfx) : function(v){ return wrapTick(this.getLabelForValue(v), 16); } },
             grid:{ display:!!horizontal, color:GRID() }, border:{display:false} },
         y:{ stacked:true, beginAtZero:true, ticks:{ font:{family:'Inter',size:11}, color:TXT(), autoSkip:false, maxRotation:0,
-              callback: horizontal ? function(v){ return wrapTick(this.getLabelForValue(v), 24); } : undefined },
+              callback: horizontal ? function(v){ return wrapTick(this.getLabelForValue(v), 24); } : (v => v + sfx) },
             grid:{ display:!horizontal, color:GRID() }, border:{display:false} } } }) },
     labels.map((l,i) => { const o = { Category:l }; series.forEach(s => o[s.name] = s.data[i]); return o; }));
 }
@@ -544,11 +557,13 @@ function lineDaily(id, days){
         datalabels:{ display: c => c.dataset.type !== 'line' && c.dataset.data[c.dataIndex] > 0,
                      anchor:'end', align:'top', color:TXT(), font:{family:'Inter',size:10.5,weight:'700'} } },
       scales:{ x:{ ticks:{ font:{family:'Inter',size:11}, color:TXT() }, grid:{display:false}, border:{display:false} },
+        // Rotated axis titles are clipped when they are longer than the plot is
+        // tall, so both are kept short — the legend carries the full wording.
         y:{ beginAtZero:true, grace:'22%', ticks:{ font:{family:'Inter',size:11}, color:TXT() }, grid:{color:GRID()},
-            border:{display:false}, title:{ display:true, text:'Interviews that day', font:{family:'Inter',size:11,weight:'600'}, color:TXT() } },
+            border:{display:false}, title:{ display:true, text:'Interviews', font:{family:'Inter',size:11,weight:'600'}, color:TXT() } },
         y1:{ position:'right', beginAtZero:true, grace:'22%', ticks:{ font:{family:'Inter',size:11}, color:TXT() },
              grid:{display:false}, border:{display:false},
-             title:{ display:true, text:'Couples finished (cumulative)', font:{family:'Inter',size:11,weight:'600'}, color:TXT() } } } }) },
+             title:{ display:true, text:'Couples', font:{family:'Inter',size:11,weight:'600'}, color:TXT() } } } }) },
     days.map((d,i) => ({ Date:d.date, 'Wife interviews':d.w, 'Husband interviews':d.h,
                          'Couples finished that day':d.couples, 'Cumulative couples':cum[i] })));
 }
