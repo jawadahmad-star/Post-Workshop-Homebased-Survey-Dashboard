@@ -203,35 +203,6 @@ const VERIFY = [
   ['match_child', 'Number of children']
 ];
 
-/** Every interview that tripped a quality check, newest concern first. */
-function qualityFlags(){
-  const out = [];
-  rows('all').forEach(r => {
-    const base = { couple:r.couple_id, role:r._role, date:r.date, enum:r.enum_name };
-    VERIFY.forEach(([v, lab]) => {
-      if (r[v] === 'Does not match')
-        out.push(Object.assign({}, base, { flag:'Baseline mismatch',
-          detail:lab + ' does not match the baseline record' }));
-    });
-    if (r.present_else === 'Yes' && r.assistance && r.assistance !== 'No Assistance')
-      out.push(Object.assign({}, base, { flag:'Third-party assistance',
-        detail:(r.relationship || 'Someone else') + ' — ' + r.assistance }));
-    if (r.comprehension === 'Poor' || r.comprehension === 'Fair')
-      out.push(Object.assign({}, base, { flag:'Low comprehension',
-        detail:'Enumerator rated comprehension as ' + r.comprehension }));
-    if (r.cooperation === 'Poor' || r.cooperation === 'Fair')
-      out.push(Object.assign({}, base, { flag:'Low cooperation',
-        detail:'Enumerator rated cooperation as ' + r.cooperation }));
-    if (!r.gps)
-      out.push(Object.assign({}, base, { flag:'No GPS fix',
-        detail:'The form did not record a location for this household' }));
-    if (r.in_roster !== 'Matched to roster')
-      out.push(Object.assign({}, base, { flag:'Not on the roster',
-        detail:'Couple ID ' + r.couple_id + ' is not in the tracking sheet' }));
-  });
-  return out;
-}
-
 function drawField(){
   const m = DB.meta, all = rows('all'), w = rows('Wife'), h = rows('Husband');
   const cps = couples(), days = dailySeries();
@@ -242,7 +213,7 @@ function drawField(){
   const rate = (rs, v) => shareOf(rs, v, ['Matches baseline']);
   const verified = VERIFY.map(([v]) => rate(all, v)).filter(x => x != null);
   const meanVerify = verified.length ? Math.round(mean(verified) * 10) / 10 : null;
-  const flags = qualityFlags();
+  const thirdParty = shareOf(all, 'present_else', ['Yes']);
 
   set('fq-kpis',
     kpi('⚡', Math.round(perDay * 10)/10, 'Couples per Field Day',
@@ -256,9 +227,8 @@ function drawField(){
         meanVerify === 100 ? 'green' : 'amber') +
     kpi('📍', pctOf(all.filter(r=>r.gps).length, all.length) + '%', 'GPS Fix Captured',
         all.filter(r=>r.gps).length + ' of ' + all.length + ' interviews', 'navy', 'navy') +
-    kpi('🚩', flags.length, 'Open Quality Flags',
-        flags.length ? 'Listed in the table below' : 'Nothing outstanding',
-        flags.length ? 'down' : 'up', flags.length ? '' : 'green'));
+    kpi('👤', thirdParty == null ? '—' : thirdParty + '%', 'Third Party Present',
+        'Someone else in the room during the interview', 'neutral', 'purple'));
 
   set('fq-insights',
     box('teal', `<strong>Pace:</strong> the team is finishing <strong>${Math.round(perDay*10)/10}</strong> couples per
@@ -270,8 +240,8 @@ function drawField(){
           and the median interview runs ${fmt1(med(durs))} minutes with a tight spread. The team is sitting with the
           right people and not rushing them.`)
       : box('amber', `<strong>Verification gaps:</strong> the five baseline checks pass on average
-          <strong>${meanVerify}%</strong> of the time. Every failure is listed in the table below — resolve these
-          before the affected interviews are used in analysis.`)));
+          <strong>${meanVerify}%</strong> of the time. The chart below shows which check is failing and in which
+          round — resolve these before the affected interviews are used in analysis.`)));
 
   cumulativeChart('chartCumulative', days, m.target_couples);
 
@@ -295,14 +265,6 @@ function drawField(){
 
   roleBar('chartCompreh', byRole('comprehension','wife'));
   roleBar('chartCoop',    byRole('cooperation','wife'));
-
-  document.getElementById('dq-body').innerHTML = flags.length
-    ? flags.map(f => `<tr><td class="cell-strong">${esc(f.couple)}</td>
-        <td><span class="badge ${f.role==='Wife'?'badge-purple':'badge-teal'}">${esc(f.role)}</span></td>
-        <td>${esc(f.date||'—')}</td><td>${esc(f.enum||'—')}</td>
-        <td><span class="badge badge-amber">${esc(f.flag)}</span></td><td>${esc(f.detail)}</td></tr>`).join('')
-    : `<tr><td colspan="6" class="tbl-empty">✅ No quality flags — every interview in view passed all five baseline
-        verification checks, recorded consent and a GPS fix, and was rated at least “Good” by the enumerator.</td></tr>`;
 }
 // ============================================================================
 //  03 · COUPLE TRACKER
