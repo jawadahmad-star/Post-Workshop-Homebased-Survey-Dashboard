@@ -866,7 +866,6 @@ function buildExplorerVars(){
 function drawExplorer(){
   renderExplorerChart();
   renderExplorerTable();
-  renderCodebook();
 }
 function renderExplorerChart(){
   if (!DB) return;
@@ -911,38 +910,6 @@ function exportRecords(){
     return o;
   }), 'interview_records');
 }
-function renderCodebook(){
-  if (!DB) return;
-  const form = document.getElementById('cb-form').value;
-  const q = (document.getElementById('cb-search').value || '').toLowerCase().trim();
-  const qs = DB.questions[form] || {}, chs = DB.choices[form] || {};
-  const rs = rows(form === 'wife' ? 'Wife' : 'Husband');
-  const items = Object.keys(qs)
-    .filter(v => !q || (v + ' ' + qs[v].text).toLowerCase().includes(q))
-    .map(v => {
-      const d = dist(rs, v, form, { showZero:true });
-      const optRows = d.length ? d.map(x => `<tr><td>${x.value}</td><td>${esc(x.label)}</td>
-          <td>${d.n ? Math.round(1000*x.value/d.n)/10 + '%' : '—'}</td></tr>`).join('') : '';
-      const list = qs[v].list ? (chs[qs[v].list] || []) : [];
-      const optsAll = list.length && !d.length
-        ? list.map(o => `<tr><td>${o.v}</td><td>${esc(o.label)}</td><td>0%</td></tr>`).join('') : '';
-      return `<div class="cb-item" onclick="this.classList.toggle('open')">
-        <div class="cb-head">
-          <span class="cb-var">${esc(v)}</span>
-          <span class="cb-q">${esc(qs[v].text)}</span>
-          <span class="cb-meta">${esc(qs[v].type || '')} · ${d.n || 0} answered</span>
-        </div>
-        <div class="cb-body">
-          ${optRows || optsAll
-            ? `<table><tbody>${optRows || optsAll}</tbody></table>`
-            : '<p style="font-size:12.5px;color:var(--text-3);margin-top:12px">Free numeric or text response — no fixed answer options.</p>'}
-        </div></div>`;
-    });
-  document.getElementById('cb-list').innerHTML = items.length ? items.join('')
-    : '<div class="tbl-empty">No questions match that search.</div>';
-  txt('cb-count', items.length + ' question' + (items.length === 1 ? '' : 's'));
-}
-
 // ============================================================================
 //  RESIZE
 // ============================================================================
