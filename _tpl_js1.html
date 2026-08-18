@@ -546,10 +546,13 @@ function lineDaily(id, days){
   let run = 0;
   const cum = days.map(d => (run += d.couples));
   mk(id, { type:'bar',
+    // Only couples that are *fully* done are plotted. A couple is credited to the
+    // field day of the later of its two interview start times, so the bars sum to
+    // the headline "couples fully interviewed" figure and the line is the running total.
     data:{ labels:days.map(d => d.date), datasets:[
-      { type:'bar',  label:'Wife interviews',    data:days.map(d=>d.w), backgroundColor:C_WIFE(), borderRadius:5, maxBarThickness:40, order:3 },
-      { type:'bar',  label:'Husband interviews', data:days.map(d=>d.h), backgroundColor:C_HUSB(), borderRadius:5, maxBarThickness:40, order:3 },
-      { type:'line', label:'Cumulative couples finished', data:cum, borderColor:S(6), backgroundColor:'rgba(23,145,66,.10)',
+      { type:'bar',  label:'Couples completed that day', data:days.map(d=>d.couples), backgroundColor:S(1),
+        borderRadius:5, maxBarThickness:40, order:3 },
+      { type:'line', label:'Cumulative couples completed', data:cum, borderColor:S(6), backgroundColor:'rgba(23,145,66,.10)',
         fill:true, tension:.3, pointBackgroundColor:S(6), pointRadius:4, pointHoverRadius:6, borderWidth:2.5, yAxisID:'y1', order:1 } ]},
     options: baseOpts({
       layout:{ padding:{ top:22 } },
@@ -559,13 +562,13 @@ function lineDaily(id, days){
       scales:{ x:{ ticks:{ font:{family:'Inter',size:11}, color:TXT() }, grid:{display:false}, border:{display:false} },
         // Rotated axis titles are clipped when they are longer than the plot is
         // tall, so both are kept short — the legend carries the full wording.
-        y:{ beginAtZero:true, grace:'22%', ticks:{ font:{family:'Inter',size:11}, color:TXT() }, grid:{color:GRID()},
-            border:{display:false}, title:{ display:true, text:'Interviews', font:{family:'Inter',size:11,weight:'600'}, color:TXT() } },
-        y1:{ position:'right', beginAtZero:true, grace:'22%', ticks:{ font:{family:'Inter',size:11}, color:TXT() },
+        y:{ beginAtZero:true, grace:'22%', ticks:{ font:{family:'Inter',size:11}, color:TXT(), precision:0 }, grid:{color:GRID()},
+            border:{display:false}, title:{ display:true, text:'Couples', font:{family:'Inter',size:11,weight:'600'}, color:TXT() } },
+        y1:{ position:'right', beginAtZero:true, grace:'22%', ticks:{ font:{family:'Inter',size:11}, color:TXT(), precision:0 },
              grid:{display:false}, border:{display:false},
-             title:{ display:true, text:'Couples', font:{family:'Inter',size:11,weight:'600'}, color:TXT() } } } }) },
-    days.map((d,i) => ({ Date:d.date, 'Wife interviews':d.w, 'Husband interviews':d.h,
-                         'Couples finished that day':d.couples, 'Cumulative couples':cum[i] })));
+             title:{ display:true, text:'Cumulative', font:{family:'Inter',size:11,weight:'600'}, color:TXT() } } } }) },
+    days.map((d,i) => ({ Date:d.date, 'Couples completed that day':d.couples, 'Cumulative couples':cum[i],
+                         'Wife interviews':d.w, 'Husband interviews':d.h })));
 }
 
 function cumulativeChart(id, days, target){

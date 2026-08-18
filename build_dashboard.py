@@ -47,6 +47,13 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
+# The progress log uses arrows and bullets, which a default Windows console
+# (cp1252) cannot encode -- a bare print() there raises UnicodeEncodeError and
+# kills an otherwise finished build. Force UTF-8 on the streams instead.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 # --------------------------------------------------------------------------------------
 #  CONFIGURATION
 # --------------------------------------------------------------------------------------
