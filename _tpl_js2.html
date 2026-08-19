@@ -116,6 +116,20 @@ function areaProgress(){
 }
 const roleColors = () => [C_WIFE(), C_HUSB()];
 
+/* The roster's endline_status is free text a field officer typed, so the values
+   are long sentences. Bucket them into the handful of outcomes that actually
+   matter; anything unrecognised keeps its own wording. */
+function rosterOutcome(s){
+  const t = String(s || '').toLowerCase();
+  if (!t) return 'Could not be surveyed';
+  if (t.includes('refus')) return 'Refused';
+  if (t.includes('shift')) return 'Moved away';
+  if (t.includes('replac') || t.includes('incorrect')) return 'Replaced household';
+  if (t.includes('died')) return 'Bereavement';
+  if (t.includes('lock')) return 'Locked / not found';
+  return s;
+}
+
 // ============================================================================
 //  01 · OVERVIEW
 // ============================================================================
@@ -124,6 +138,27 @@ function drawOverview(){
   const target = m.target_couples;
   const anyIds = new Set([...w.map(r => r.couple_id), ...h.map(r => r.couple_id)]);
   const partial = anyIds.size - cps.length;
+
+  /* Households visited where the respondent did not consent. These are contact
+     attempts, not interviews — they carry no answers — so they are excluded
+     from every count above and reported separately here. Most sit outside the
+     endline frame already, which is exactly why the visit went nowhere. */
+  const dec = declinedRows();
+  const decIds = new Set(dec.map(r => r.couple_id));
+  const eligibleIds = new Set(DB.roster.filter(r => r.eligible).map(r => r.couple_id));
+  const decInFrame = [...decIds].filter(id => eligibleIds.has(id)).length;
+  const decOutFrame = decIds.size - decInFrame;
+  /* Why the roster had already given up on them, in the field officer's words. */
+  const decWhy = (() => {
+    const byId = new Map(DB.roster.map(r => [r.couple_id, r]));
+    const c = new Map();
+    decIds.forEach(id => {
+      const k = rosterOutcome((byId.get(id) || {}).endline_status);
+      c.set(k, (c.get(k) || 0) + 1);
+    });
+    return [...c.entries()].sort((a,b) => b[1] - a[1])
+      .map(([k,n]) => n + ' ' + k.toLowerCase()).join(', ');
+  })();
 
   const remaining = Math.max(target - cps.length, 0);
   const perDay = m.field_days ? cps.length / m.field_days : 0;
@@ -151,8 +186,21 @@ function drawOverview(){
   set('ov-callouts',
     callout('green','✅','Both spouses interviewed',
       cps.length + ' couple' + (cps.length===1?'':'s') + ' complete — ' + pctOf(cps.length, target) + '% of the frame.') +
-    callout('amber','◐','Only one spouse so far',
-      partial + ' couple' + (partial===1?'':'s') + ' have one interview in and still need the other.') +
+    (partial > 0
+      ? callout('amber','◐','Only one spouse so far',
+          partial + ' couple' + (partial===1?' has':'s have') + ' one interview in and still ' +
+          (partial===1?'needs':'need') + ' the other — a return visit is owed.')
+      : callout('green','◐','No half-finished couples',
+          'Every couple the team interviewed has both the wife and the husband on file. Nothing is waiting on a return visit.')) +
+    (decIds.size
+      ? callout('primary','⛔','Visited but no interview',
+          decIds.size + ' household' + (decIds.size===1?' was':'s were') + ' approached and the respondent declined, so neither ' +
+          'spouse was interviewed' + (decWhy ? ' — the tracking sheet had already recorded ' + decWhy : '') + '. ' +
+          (decOutFrame === decIds.size
+            ? 'None of them are in the ' + target + '-couple frame, so the targets above are unaffected.'
+            : decInFrame + ' of them ' + (decInFrame===1?'is':'are') + ' inside the frame and still ' +
+              (decInFrame===1?'counts':'count') + ' as not started.'))
+      : '') +
     callout('navy','⏳','Still to reach',
       remaining.toLocaleString() + ' couples untouched. At ' + Math.round(perDay*10)/10 +
       ' couples per field day that is about ' + (perDay ? Math.ceil(remaining/perDay).toLocaleString() : '—') + ' more days.') +
@@ -179,30 +227,20 @@ function drawOverview(){
   lineDaily('chartDaily', dailySeries());
   progressDonut('chartProgress', cps.length, target, 'couples');
 
-  const state = [
-    { label:'Both spouses interviewed', value:cps.length },
-    { label:'One spouse only',          value:partial },
-    { label:'Not started',              value:Math.max(target - anyIds.size, 0) }
-  ];
+  /* A zero-size slice draws a stray tick on the ring and an entry in the
+     legend for a category that does not exist, so empty states are dropped. */
+  const stateAll = [
+    { label:'Both spouses interviewed', value:cps.length,                             col:S(6) },
+    { label:'One spouse only',          value:partial,                                col:S(4) },
+    { label:'Not started',              value:Math.max(target - anyIds.size, 0),      col:MUTED() }
+  ].filter(x => x.value > 0);
+  const state = stateAll.map(x => ({ label:x.label, value:x.value }));
   state.n = target;
-  donutChart('chartCoupleState', state, [S(6), S(4), MUTED()]);
+  donutChart('chartCoupleState', state, stateAll.map(x => x.col));
 
-  /* The roster's endline_status is free text a field officer typed, so the
-     values are long sentences. Bucket them into the handful of outcomes that
-     actually matter; anything unrecognised keeps its own wording. */
-  const outcome = s => {
-    const t = String(s || '').toLowerCase();
-    if (!t) return 'Could not be surveyed';
-    if (t.includes('refus')) return 'Refused';
-    if (t.includes('shift')) return 'Moved away';
-    if (t.includes('replac') || t.includes('incorrect')) return 'Replaced household';
-    if (t.includes('died')) return 'Bereavement';
-    if (t.includes('lock')) return 'Locked / not found';
-    return s;
-  };
   const endline = new Map();
   DB.roster.forEach(r => {
-    const k = r.eligible ? 'Surveyed at endline' : outcome(r.endline_status);
+    const k = r.eligible ? 'Surveyed at endline' : rosterOutcome(r.endline_status);
     endline.set(k, (endline.get(k) || 0) + 1);
   });
   const eArr = [...endline.entries()].map(([label, value]) => ({ label, value })).sort((a,b) => b.value - a.value);
@@ -250,13 +288,17 @@ let trSort = { key:'couple_id', dir:1 };
 function trackerRows(){
   const wIds = new Set(rows('Wife').map(r => r.couple_id));
   const hIds = new Set(rows('Husband').map(r => r.couple_id));
+  /* Approached, refused at the door. Distinct from never-visited: the field
+     team has spent the trip, so it should not sit in "not started". */
+  const dIds = new Set(declinedRows().map(r => r.couple_id));
   const byId = new Map();
   rows('all').forEach(r => byId.set(r.couple_id + r._role, r));
   return DB.roster.map(r => {
     const w = wIds.has(r.couple_id), h = hIds.has(r.couple_id);
     return Object.assign({}, r, {
       w:w ? 1 : 0, h:h ? 1 : 0,
-      done: w && h ? 'Both done' : (w || h) ? 'One spouse only' : 'Not started',
+      done: w && h ? 'Both done' : (w || h) ? 'One spouse only'
+          : dIds.has(r.couple_id) ? 'Visited, declined' : 'Not started',
       wDate:(byId.get(r.couple_id + 'Wife')    || {}).date || '',
       hDate:(byId.get(r.couple_id + 'Husband') || {}).date || ''
     });
@@ -274,6 +316,7 @@ function filteredTracker(){
     if (st === 'both'    && r.done !== 'Both done')      return false;
     if (st === 'partial' && r.done !== 'One spouse only') return false;
     if (st === 'none'    && r.done !== 'Not started')     return false;
+    if (st === 'declined' && r.done !== 'Visited, declined') return false;
     if (q){
       const hay = [r.couple_id, r.hhd_id, r.wife_name, r.husband_name, r.area, r.sampletype].join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
@@ -292,11 +335,13 @@ function drawTracker(){
   const all = trackerRows().filter(r => r.eligible);
   const both = all.filter(r => r.done === 'Both done').length;
   const part = all.filter(r => r.done === 'One spouse only').length;
+  const decl = all.filter(r => r.done === 'Visited, declined').length;
   set('tr-kpis',
     kpi('🎯', all.length, 'Couples in Scope', 'Surveyed at endline', 'navy', 'navy') +
     kpi('✅', both, 'Both Interviews Done', pctOf(both, all.length) + '% of the frame', 'up', 'green') +
     kpi('◐', part, 'One Spouse Only', 'Return visit needed', part ? 'neutral' : 'up', 'amber') +
-    kpi('○', all.length - both - part, 'Not Yet Started', 'No interview recorded', 'navy', 'teal'));
+    (decl ? kpi('⛔', decl, 'Visited, Declined', 'Consent refused at the door', 'down', '') : '') +
+    kpi('○', all.length - both - part - decl, 'Not Yet Started', 'No visit recorded', 'navy', 'teal'));
 
   const areas = areaProgress();
   set('tr-areas', areas.map(a => {
@@ -328,6 +373,7 @@ function pctColor(p){ return p > 0 ? barColor(p) : CV('--text-2'); }
 function statusBadge(s, short){
   if (s === 'Both done')       return `<span class="badge badge-green">✓ ${short?'Complete':'Both interviews done'}</span>`;
   if (s === 'One spouse only') return '<span class="badge badge-amber">◐ In progress</span>';
+  if (s === 'Visited, declined') return `<span class="badge badge-red">⛔ ${short?'Declined':'Visited, declined'}</span>`;
   return '<span class="badge badge-grey">○ Not started</span>';
 }
 function renderTracker(){

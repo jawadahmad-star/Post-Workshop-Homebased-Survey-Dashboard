@@ -126,7 +126,7 @@
       </div>
       <div class="chart-card">
         <h3>Couple Completion State</h3>
-        <div class="chart-desc">Both spouses · one spouse only · not yet started</div>
+        <div class="chart-desc">Both spouses · one spouse only · not yet started. Households that were visited but did not consent are not interviews and sit outside this ring.</div>
         <div class="chart-wrap"><canvas id="chartCoupleState"></canvas></div>
       </div>
       <div class="chart-card">
@@ -182,6 +182,7 @@
         <option value="all">All couples</option>
         <option value="both">✓ Both interviews done</option>
         <option value="partial">◐ One spouse only</option>
+        <option value="declined">⛔ Visited, declined</option>
         <option value="none">○ Not started</option>
       </select>
       <select class="fb-sel" id="tr-scope" onchange="renderTracker()">

@@ -42,6 +42,7 @@ import os
 import re
 import sys
 import unicodedata
+from collections import Counter
 from datetime import datetime
 
 import numpy as np
@@ -360,6 +361,13 @@ def build_records(df: pd.DataFrame, vlabels: dict, questions: dict, choices: dic
         rec["couple_id"] = couple
         rec["hhd_id"] = hhd
 
+        # Consent is the gate. A form where the respondent answered anything
+        # other than "Yes, in this visit" is a *contact attempt* — a two-minute
+        # doorstep record with no substantive answers — and must never be
+        # counted as a completed interview. `split_declined` moves these out.
+        consent = to_num(row.get("consent_choices"))
+        rec["_consent"] = 1 if consent is None else int(consent)
+
         # SurveyCTO writes the interview start/end as timestamps; the field day and
         # the realised interview length both come off them.
         start = pd.to_datetime(row.get("starttime"), errors="coerce")
@@ -521,10 +529,44 @@ def read_roster(path: str) -> tuple[list[dict], dict]:
 
 
 # --------------------------------------------------------------------------------------
+#  3b.  CONSENT SPLIT  —  attempts are not interviews
+# --------------------------------------------------------------------------------------
+
+# The consent question's codes, straight from the XLSForm choice list.
+CONSENT_OUTCOME = {
+    1: "Consented",
+    2: "Postponed to another visit",
+    3: "Refused outright",
+    4: "Nobody available, no revisit possible",
+}
+
+
+def split_declined(records: list[dict], role: str) -> tuple[list[dict], list[dict]]:
+    """Separate completed interviews from doorstep refusals / non-contacts.
+
+    A declined form still matters — it is evidence the household was reached —
+    so it is kept and shipped as its own list, just never mixed into the
+    interview counts, durations, or any substantive distribution.
+    """
+    done, declined = [], []
+    for r in records:
+        code = r.get("_consent", 1)
+        if code == 1:
+            done.append(r)
+        else:
+            r["consent_outcome"] = CONSENT_OUTCOME.get(code, "Not consented")
+            declined.append(r)
+    if declined:
+        log(f"{role}: {len(declined)} contact attempt(s) without consent held out of "
+            f"the interview counts ({len(done)} completed)")
+    return done, declined
+
+
+# --------------------------------------------------------------------------------------
 #  4.  META  —  headline figures computed once, server-side
 # --------------------------------------------------------------------------------------
 
-def build_meta(wife: list, husb: list, roster: list) -> dict:
+def build_meta(wife: list, husb: list, roster: list, declined: list) -> dict:
     wc = {r["couple_id"] for r in wife if r.get("couple_id")}
     hc = {r["couple_id"] for r in husb if r.get("couple_id")}
     eligible = [r for r in roster if r["eligible"]]
@@ -555,6 +597,12 @@ def build_meta(wife: list, husb: list, roster: list) -> dict:
         "n_couples_husb_only": len(hc - wc),
         "target_couples": target_couples,
         "target_interviews": target_couples * 2,
+        "n_declined": len(declined),
+        "n_declined_in_frame": len({r["couple_id"] for r in declined
+                                    if r.get("couple_id") in frame_ids}),
+        "declined_outcomes": {k: v for k, v in sorted(
+            Counter(r.get("consent_outcome", "Not consented") for r in declined).items(),
+            key=lambda kv: -kv[1])},
         "roster_total": len(roster),
         "roster_eligible": len(eligible),
         "roster_not_surveyed": len(roster) - len(eligible),
@@ -631,13 +679,18 @@ def main() -> int:
     wife = build_records(df_w, vl_w, q_wife, ch_wife, "Wife", roster_by_couple)
     husb = build_records(df_h, vl_h, q_husb, ch_husb, "Husband", roster_by_couple)
 
-    meta = build_meta(wife, husb, roster)
+    wife, dec_w = split_declined(wife, "wife")
+    husb, dec_h = split_declined(husb, "husband")
+    declined = dec_w + dec_h
+
+    meta = build_meta(wife, husb, roster, declined)
 
     payload = {
         "meta": meta,
         "roster": roster,
         "wife": wife,
         "husband": husb,
+        "declined": declined,
         "questions": {"wife": q_wife, "husband": q_husb},
         "choices": {"wife": ch_wife, "husband": ch_husb},
     }

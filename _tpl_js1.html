@@ -116,6 +116,11 @@ function rows(role){
   const src = role === 'Wife' ? WIFE() : role === 'Husband' ? HUSB() : WIFE().concat(HUSB());
   return src.filter(passes);
 }
+/** Doorstep contacts where the respondent did not consent — visited, never
+ *  interviewed. Held out of every interview statistic, reported on its own. */
+function declinedRows(){
+  return (DB && DB.declined ? DB.declined : []).filter(passes);
+}
 /** Couples where both spouses were interviewed *and* both pass the filters. */
 function couples(){
   const w = new Map(), out = [];
