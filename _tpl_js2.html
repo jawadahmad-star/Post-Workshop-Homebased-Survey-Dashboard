@@ -139,27 +139,6 @@ function drawOverview(){
   const anyIds = new Set([...w.map(r => r.couple_id), ...h.map(r => r.couple_id)]);
   const partial = anyIds.size - cps.length;
 
-  /* Households visited where the respondent did not consent. These are contact
-     attempts, not interviews — they carry no answers — so they are excluded
-     from every count above and reported separately here. Most sit outside the
-     endline frame already, which is exactly why the visit went nowhere. */
-  const dec = declinedRows();
-  const decIds = new Set(dec.map(r => r.couple_id));
-  const eligibleIds = new Set(DB.roster.filter(r => r.eligible).map(r => r.couple_id));
-  const decInFrame = [...decIds].filter(id => eligibleIds.has(id)).length;
-  const decOutFrame = decIds.size - decInFrame;
-  /* Why the roster had already given up on them, in the field officer's words. */
-  const decWhy = (() => {
-    const byId = new Map(DB.roster.map(r => [r.couple_id, r]));
-    const c = new Map();
-    decIds.forEach(id => {
-      const k = rosterOutcome((byId.get(id) || {}).endline_status);
-      c.set(k, (c.get(k) || 0) + 1);
-    });
-    return [...c.entries()].sort((a,b) => b[1] - a[1])
-      .map(([k,n]) => n + ' ' + k.toLowerCase()).join(', ');
-  })();
-
   const remaining = Math.max(target - cps.length, 0);
   const perDay = m.field_days ? cps.length / m.field_days : 0;
   const all = rows('all');
@@ -192,15 +171,6 @@ function drawOverview(){
           (partial===1?'needs':'need') + ' the other — a return visit is owed.')
       : callout('green','◐','No half-finished couples',
           'Every couple the team interviewed has both the wife and the husband on file. Nothing is waiting on a return visit.')) +
-    (decIds.size
-      ? callout('primary','⛔','Visited but no interview',
-          decIds.size + ' household' + (decIds.size===1?' was':'s were') + ' approached and the respondent declined, so neither ' +
-          'spouse was interviewed' + (decWhy ? ' — the tracking sheet had already recorded ' + decWhy : '') + '. ' +
-          (decOutFrame === decIds.size
-            ? 'None of them are in the ' + target + '-couple frame, so the targets above are unaffected.'
-            : decInFrame + ' of them ' + (decInFrame===1?'is':'are') + ' inside the frame and still ' +
-              (decInFrame===1?'counts':'count') + ' as not started.'))
-      : '') +
     callout('navy','⏳','Still to reach',
       remaining.toLocaleString() + ' couples untouched. At ' + Math.round(perDay*10)/10 +
       ' couples per field day that is about ' + (perDay ? Math.ceil(remaining/perDay).toLocaleString() : '—') + ' more days.') +
